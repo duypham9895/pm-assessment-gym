@@ -2,6 +2,22 @@
 
 Practice mocks for product management analytical assessments. Built as a single-page React + TypeScript app with a 30-question bank covering six PM skill areas: Product Analytics, Data Literacy, Chart Interpretation, Inductive Reasoning, Data Interpretation, and A/B Testing.
 
+**Live demo:** https://pm-assessment-lime.vercel.app
+
+Auto-deploys to Vercel on every push to `main`.
+
+## Features
+
+- **Full Mock** and **Topic Drill** modes with **Exam** or **Practice** feedback
+- 21-question mock with a 30-minute timer and auto-submit
+- Question navigator (jump to any question) and "Next unanswered" jump
+- Practice mode shows the correct answer + explanation immediately
+- Weakest-topic detection and one-click drill
+- localStorage history of your last 5 attempts
+- Light, dark, and system theme with manual toggle
+- Keyboard shortcuts: press `1`–`5` to pick a choice
+- Mobile-friendly, accessible focus rings, `prefers-reduced-motion` respected
+
 ## Run locally
 
 ```bash
