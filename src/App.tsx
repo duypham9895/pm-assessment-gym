@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FRAMEWORKS_MARKDOWN } from "./frameworks";
 import { QUESTIONS, TOPIC_LABELS, TOPIC_ORDER } from "./questions";
@@ -22,12 +23,33 @@ import type {
 } from "./types";
 
 type View = "home" | "test" | "results" | "frameworks";
+type ThemeMode = "system" | "light" | "dark";
 
 const CHOICE_IDS: ChoiceId[] = ["A", "B", "C", "D", "E"];
 const QUESTION_BY_ID = new Map(QUESTIONS.map((question) => [question.id, question]));
+const THEME_KEY = "pm-assessment-theme-v1";
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function loadTheme(): ThemeMode {
+  if (typeof window === "undefined") return "system";
+  const stored = window.localStorage.getItem(THEME_KEY);
+  return stored === "light" || stored === "dark" ? stored : "system";
+}
+
+function timerClassName(remainingSeconds: number) {
+  if (remainingSeconds <= 60) return "timer timer--critical";
+  if (remainingSeconds <= 5 * 60) return "timer timer--warning";
+  return "timer";
+}
+
+function slugify(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function formatTimer(totalSeconds: number) {
@@ -95,7 +117,23 @@ export default function App() {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [confidenceDrafts, setConfidenceDrafts] = useState<Record<string, Confidence>>({});
   const [unansweredWarning, setUnansweredWarning] = useState<number[] | null>(null);
+  const [theme, setTheme] = useState<ThemeMode>(() => loadTheme());
   const submittedSessionIds = useRef(new Set<string>());
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "system") {
+      root.removeAttribute("data-theme");
+      window.localStorage.removeItem(THEME_KEY);
+    } else {
+      root.setAttribute("data-theme", theme);
+      window.localStorage.setItem(THEME_KEY, theme);
+    }
+  }, [theme]);
+
+  const cycleTheme = useCallback(() => {
+    setTheme((prev) => (prev === "system" ? "light" : prev === "light" ? "dark" : "system"));
+  }, []);
 
   const currentQuestion = session
     ? selectedQuestions[session.currentQuestionIndex]
@@ -254,6 +292,28 @@ export default function App() {
     });
   }, []);
 
+  const jumpToQuestion = useCallback((index: number) => {
+    setSession((previous) => {
+      if (!previous) return previous;
+      if (index < 0 || index >= previous.questionIds.length) return previous;
+      return { ...previous, currentQuestionIndex: index };
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const jumpToNextUnanswered = useCallback(() => {
+    if (!session) return;
+    const total = session.questionIds.length;
+    for (let offset = 1; offset <= total; offset += 1) {
+      const index = (session.currentQuestionIndex + offset) % total;
+      const questionId = session.questionIds[index];
+      if (!session.answers[questionId]) {
+        jumpToQuestion(index);
+        return;
+      }
+    }
+  }, [jumpToQuestion, session]);
+
   useEffect(() => {
     if (view !== "test" || !session) return;
 
@@ -308,6 +368,8 @@ export default function App() {
     };
   }, [latestAttempt]);
 
+  const themeToggle = <ThemeToggle theme={theme} onCycle={cycleTheme} />;
+
   return (
     <main className="app-shell">
       {view === "home" && (
@@ -316,6 +378,7 @@ export default function App() {
           selectedMode={selectedMode}
           selectedFeedbackMode={selectedFeedbackMode}
           selectedTopic={selectedTopic}
+          themeToggle={themeToggle}
           onModeChange={setSelectedMode}
           onFeedbackModeChange={setSelectedFeedbackMode}
           onTopicChange={setSelectedTopic}
@@ -333,6 +396,7 @@ export default function App() {
           }
           currentIndex={session.currentQuestionIndex}
           question={currentQuestion}
+          questions={selectedQuestions}
           questionCount={selectedQuestions.length}
           remainingSeconds={remainingSeconds}
           session={session}
@@ -340,6 +404,8 @@ export default function App() {
           onAnswer={selectChoice}
           onConfidence={setCurrentConfidence}
           onDismissSubmitWarning={() => setUnansweredWarning(null)}
+          onJump={jumpToQuestion}
+          onJumpNextUnanswered={jumpToNextUnanswered}
           onMove={moveQuestion}
           onSubmit={() => submitSession()}
           onSubmitAnyway={() => submitSession({ skipUnansweredWarning: true })}
@@ -351,6 +417,7 @@ export default function App() {
           attempt={latestAttempt}
           correctCount={resultData.correctCount}
           wrongReviews={resultData.wrongReviews}
+          themeToggle={themeToggle}
           onFullMock={() => startSession({ mode: "full_mock", feedbackMode: "exam" })}
           onDrillWeakest={(topic) =>
             startSession({ mode: "topic_drill", feedbackMode: "practice", topic })
@@ -364,6 +431,7 @@ export default function App() {
 
       {view === "frameworks" && (
         <FrameworksView
+          themeToggle={themeToggle}
           onBack={() => {
             setView("home");
             window.scrollTo({ top: 0, behavior: "smooth" });
@@ -374,11 +442,32 @@ export default function App() {
   );
 }
 
+function ThemeToggle({ theme, onCycle }: { theme: ThemeMode; onCycle: () => void }) {
+  const label =
+    theme === "system" ? "Auto theme" : theme === "light" ? "Light theme" : "Dark theme";
+  const glyph = theme === "system" ? "🖥" : theme === "light" ? "☀" : "☾";
+  const next =
+    theme === "system" ? "light" : theme === "light" ? "dark" : "auto";
+  return (
+    <button
+      type="button"
+      className="icon-button"
+      onClick={onCycle}
+      aria-label={`${label}. Switch to ${next} theme.`}
+      title={`${label} — click for ${next}`}
+    >
+      <span aria-hidden="true">{glyph}</span>
+      <span>{theme === "system" ? "Auto" : theme === "light" ? "Light" : "Dark"}</span>
+    </button>
+  );
+}
+
 type HomeViewProps = {
   attempts: Attempt[];
   selectedMode: SessionMode;
   selectedFeedbackMode: FeedbackMode;
   selectedTopic: Topic;
+  themeToggle: ReactNode;
   onModeChange: (mode: SessionMode) => void;
   onFeedbackModeChange: (mode: FeedbackMode) => void;
   onTopicChange: (topic: Topic) => void;
@@ -391,6 +480,7 @@ function HomeView({
   selectedMode,
   selectedFeedbackMode,
   selectedTopic,
+  themeToggle,
   onModeChange,
   onFeedbackModeChange,
   onTopicChange,
@@ -404,9 +494,12 @@ function HomeView({
           <h1>PM Assessment Gym</h1>
           <p>Practice mocks for PM assessment readiness</p>
         </div>
-        <button className="secondary-button" type="button" onClick={onFrameworks}>
-          Frameworks
-        </button>
+        <div className="header-actions">
+          {themeToggle}
+          <button className="secondary-button" type="button" onClick={onFrameworks}>
+            Frameworks
+          </button>
+        </div>
       </header>
 
       <section className="panel">
@@ -480,12 +573,16 @@ function HomeView({
       <section className="panel">
         <div className="section-heading">
           <h2>Latest Attempts</h2>
-          <span>{attempts.length ? `${Math.min(attempts.length, 3)} shown` : "Ready"}</span>
+          <span>
+            {attempts.length ? `${Math.min(attempts.length, 3)} most recent` : "No history yet"}
+          </span>
         </div>
 
         {attempts.length === 0 ? (
           <p className="empty-state">
-            No attempts yet. Start with a Full Mock in Exam Mode to create your baseline.
+            <strong>No attempts yet.</strong>
+            Start with a Full Mock in Exam mode to set your baseline. After submitting, the
+            weakest topic surfaces here so you know what to drill next.
           </p>
         ) : (
           <div className="attempt-list">
@@ -528,6 +625,7 @@ type TestViewProps = {
   currentConfidence: Confidence;
   currentIndex: number;
   question: Question;
+  questions: Question[];
   questionCount: number;
   remainingSeconds: number;
   session: TestSession;
@@ -535,6 +633,8 @@ type TestViewProps = {
   onAnswer: (choiceId: ChoiceId) => void;
   onConfidence: (confidence: Confidence) => void;
   onDismissSubmitWarning: () => void;
+  onJump: (index: number) => void;
+  onJumpNextUnanswered: () => void;
   onMove: (direction: -1 | 1) => void;
   onSubmit: () => void;
   onSubmitAnyway: () => void;
@@ -546,6 +646,7 @@ function TestView({
   currentConfidence,
   currentIndex,
   question,
+  questions,
   questionCount,
   remainingSeconds,
   session,
@@ -553,12 +654,16 @@ function TestView({
   onAnswer,
   onConfidence,
   onDismissSubmitWarning,
+  onJump,
+  onJumpNextUnanswered,
   onMove,
   onSubmit,
   onSubmitAnyway,
 }: TestViewProps) {
   const isPracticeFeedbackVisible = session.feedbackMode === "practice" && Boolean(answer);
   const isCorrect = answer?.choiceId === question.correctChoiceId;
+  const progressPercent = questionCount > 0 ? Math.round((answeredCount / questionCount) * 100) : 0;
+  const hasUnanswered = answeredCount < questionCount;
 
   return (
     <div className="test-layout">
@@ -567,9 +672,17 @@ function TestView({
           <strong>
             {modeLabel(session.mode)} · {feedbackModeLabel(session.feedbackMode)}
           </strong>
-          <span>{answeredCount}/{questionCount} answered</span>
+          <span>{answeredCount}/{questionCount} answered · {progressPercent}%</span>
+          <div className="progress-bar" aria-hidden="true">
+            <span style={{ width: `${progressPercent}%` }} />
+          </div>
         </div>
-        <div className="timer" aria-label="Timer">
+        <div
+          className={timerClassName(remainingSeconds)}
+          role="timer"
+          aria-live="off"
+          aria-label={`Time remaining ${formatTimer(remainingSeconds)}`}
+        >
           {formatTimer(remainingSeconds)}
         </div>
         <button className="primary-button" type="button" onClick={onSubmit}>
@@ -577,17 +690,42 @@ function TestView({
         </button>
       </header>
 
+      <nav
+        className="question-navigator"
+        role="tablist"
+        aria-label="Jump to question"
+      >
+        {questions.map((q, index) => {
+          const isAnswered = Boolean(session.answers[q.id]);
+          const isCurrent = index === currentIndex;
+          const state = isCurrent ? "current" : isAnswered ? "answered" : "unanswered";
+          return (
+            <button
+              className={`nav-pill nav-pill--${state}`}
+              key={q.id}
+              type="button"
+              role="tab"
+              aria-selected={isCurrent}
+              aria-label={`Question ${index + 1}, ${state}`}
+              onClick={() => onJump(index)}
+            >
+              {index + 1}
+            </button>
+          );
+        })}
+      </nav>
+
       {unansweredWarning && (
         <section className="submit-warning" role="alert">
           <div>
-            <strong>Unanswered questions</strong>
-            <p>{unansweredWarning.map((index) => `Q${index}`).join(", ")}</p>
+            <strong>{unansweredWarning.length} unanswered</strong>
+            <p>Q{unansweredWarning.join(", Q")}</p>
           </div>
           <div>
-            <button className="secondary-button" type="button" onClick={onDismissSubmitWarning}>
+            <button className="primary-button" type="button" onClick={onDismissSubmitWarning}>
               Keep answering
             </button>
-            <button className="primary-button" type="button" onClick={onSubmitAnyway}>
+            <button className="secondary-button" type="button" onClick={onSubmitAnyway}>
               Submit anyway
             </button>
           </div>
@@ -600,11 +738,12 @@ function TestView({
             Q{currentIndex + 1} / {questionCount}
           </span>
           <span>{TOPIC_LABELS[question.topic]}</span>
+          <span aria-label="Estimated time">{question.estimatedSeconds}s target</span>
         </div>
         <h1>{question.prompt}</h1>
 
         <div className="choices" aria-label="Answer choices">
-          {question.choices.map((choice) => {
+          {question.choices.map((choice, index) => {
             const isSelected = answer?.choiceId === choice.id;
             const showCorrect = isPracticeFeedbackVisible && choice.id === question.correctChoiceId;
             const showWrong = isPracticeFeedbackVisible && isSelected && !isCorrect;
@@ -620,14 +759,22 @@ function TestView({
                   .join(" ")}
                 key={choice.id}
                 type="button"
+                aria-label={`Choice ${choice.id} (press ${index + 1}): ${choice.text}`}
                 onClick={() => onAnswer(choice.id)}
               >
-                <span>{choice.id}</span>
-                {choice.text}
+                <span className="choice-letter">
+                  {choice.id}
+                  <small aria-hidden="true">{index + 1}</small>
+                </span>
+                <span>{choice.text}</span>
               </button>
             );
           })}
         </div>
+
+        <p className="keyboard-hint">
+          Tip: press <kbd>1</kbd>–<kbd>5</kbd> to pick a choice.
+        </p>
 
         <div className="confidence-block">
           <span className="control-label">Confidence</span>
@@ -666,9 +813,17 @@ function TestView({
           >
             Previous
           </button>
-          <span className={answer ? "answered-pill" : "unanswered-pill"}>
-            {answer ? "Answered" : "Unanswered"}
-          </span>
+          {hasUnanswered ? (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={onJumpNextUnanswered}
+            >
+              Next unanswered
+            </button>
+          ) : (
+            <span className="answered-pill">All answered</span>
+          )}
           <button
             className="secondary-button"
             type="button"
@@ -687,6 +842,7 @@ type ResultsViewProps = {
   attempt: Attempt;
   correctCount: number;
   wrongReviews: QuestionReview[];
+  themeToggle: ReactNode;
   onFullMock: () => void;
   onDrillWeakest: (topic: Topic) => void;
   onHome: () => void;
@@ -696,6 +852,7 @@ function ResultsView({
   attempt,
   correctCount,
   wrongReviews,
+  themeToggle,
   onFullMock,
   onDrillWeakest,
   onHome,
@@ -710,9 +867,12 @@ function ResultsView({
             {formatDuration(attempt.durationSeconds)}
           </p>
         </div>
-        <button className="secondary-button" type="button" onClick={onHome}>
-          Back home
-        </button>
+        <div className="header-actions">
+          {themeToggle}
+          <button className="secondary-button" type="button" onClick={onHome}>
+            Back home
+          </button>
+        </div>
       </header>
 
       <section className="result-summary">
@@ -853,8 +1013,20 @@ function WrongReviewCard({ review }: { review: QuestionReview }) {
   );
 }
 
-function FrameworksView({ onBack }: { onBack: () => void }) {
+function FrameworksView({
+  themeToggle,
+  onBack,
+}: {
+  themeToggle: ReactNode;
+  onBack: () => void;
+}) {
   const lines = FRAMEWORKS_MARKDOWN.trim().split("\n");
+  const sections = lines
+    .filter((line) => line.startsWith("## "))
+    .map((line) => {
+      const title = line.replace("## ", "").trim();
+      return { title, slug: slugify(title) };
+    });
 
   return (
     <div className="stack">
@@ -863,26 +1035,49 @@ function FrameworksView({ onBack }: { onBack: () => void }) {
           <h1>Frameworks</h1>
           <p>Fast PM mental models for assessment practice</p>
         </div>
-        <button className="secondary-button" type="button" onClick={onBack}>
-          Back home
-        </button>
+        <div className="header-actions">
+          {themeToggle}
+          <button className="secondary-button" type="button" onClick={onBack}>
+            Back home
+          </button>
+        </div>
       </header>
 
-      <article className="framework-doc">
-        {lines.map((line, index) => {
-          if (line.startsWith("# ")) {
-            return <h1 key={`${line}-${index}`}>{line.replace("# ", "")}</h1>;
-          }
-          if (line.startsWith("## ")) {
-            return <h2 key={`${line}-${index}`}>{line.replace("## ", "")}</h2>;
-          }
-          if (line.startsWith("- ")) {
-            return <p className="framework-bullet" key={`${line}-${index}`}>{line}</p>;
-          }
-          if (!line.trim()) return null;
-          return <p key={`${line}-${index}`}>{line}</p>;
-        })}
-      </article>
+      <div className="framework-layout">
+        <aside className="framework-toc" aria-label="Framework sections">
+          <strong>Jump to</strong>
+          {sections.map((section) => (
+            <a key={section.slug} href={`#${section.slug}`}>
+              {section.title}
+            </a>
+          ))}
+        </aside>
+
+        <article className="framework-doc">
+          {lines.map((line, index) => {
+            if (line.startsWith("# ")) {
+              return <h1 key={`${line}-${index}`}>{line.replace("# ", "")}</h1>;
+            }
+            if (line.startsWith("## ")) {
+              const title = line.replace("## ", "").trim();
+              return (
+                <h2 id={slugify(title)} key={`${line}-${index}`}>
+                  {title}
+                </h2>
+              );
+            }
+            if (line.startsWith("- ")) {
+              return (
+                <p className="framework-bullet" key={`${line}-${index}`}>
+                  {line.replace(/^-\s+/, "")}
+                </p>
+              );
+            }
+            if (!line.trim()) return null;
+            return <p key={`${line}-${index}`}>{line}</p>;
+          })}
+        </article>
+      </div>
     </div>
   );
 }
