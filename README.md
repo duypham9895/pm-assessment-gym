@@ -4,7 +4,7 @@ Practice mocks for product management analytical assessments. Built as a single-
 
 **Live demo:** https://pm-assessment-lime.vercel.app
 
-Auto-deploys to Vercel on every push to `main`.
+Auto-deploys to Vercel on every push to `main`. Pull requests get their own preview URL.
 
 ## Features
 
