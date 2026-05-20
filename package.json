@@ -2,6 +2,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "validate:questions": "node scripts/validate-question-bank.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -23,7 +23,7 @@ import type {
 } from "./types";
 
 type View = "home" | "test" | "results" | "frameworks";
-type ThemeMode = "system" | "light" | "dark";
+type ThemeMode = "light" | "dark";
 
 const CHOICE_IDS: ChoiceId[] = ["A", "B", "C", "D", "E"];
 const QUESTION_BY_ID = new Map(QUESTIONS.map((question) => [question.id, question]));
@@ -34,9 +34,9 @@ function createId(prefix: string) {
 }
 
 function loadTheme(): ThemeMode {
-  if (typeof window === "undefined") return "system";
+  if (typeof window === "undefined") return "light";
   const stored = window.localStorage.getItem(THEME_KEY);
-  return stored === "light" || stored === "dark" ? stored : "system";
+  return stored === "dark" ? "dark" : "light";
 }
 
 function timerClassName(remainingSeconds: number) {
@@ -88,6 +88,10 @@ function feedbackModeLabel(mode: FeedbackMode) {
   return mode === "exam" ? "Exam" : "Practice";
 }
 
+function difficultyLabel(difficulty: Question["difficulty"]) {
+  return difficulty[0].toUpperCase() + difficulty.slice(1);
+}
+
 function confidenceLabel(confidence?: Confidence) {
   if (confidence === 1) return "1 Guessing";
   if (confidence === 3) return "3 Confident";
@@ -122,17 +126,12 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === "system") {
-      root.removeAttribute("data-theme");
-      window.localStorage.removeItem(THEME_KEY);
-    } else {
-      root.setAttribute("data-theme", theme);
-      window.localStorage.setItem(THEME_KEY, theme);
-    }
+    root.setAttribute("data-theme", theme);
+    window.localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
   const cycleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "system" ? "light" : prev === "light" ? "dark" : "system"));
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
   }, []);
 
   const currentQuestion = session
@@ -143,6 +142,17 @@ export default function App() {
   const answeredCount = session
     ? selectedQuestions.filter((question) => session.answers[question.id]).length
     : 0;
+  const topicQuestionCounts = useMemo(
+    () =>
+      TOPIC_ORDER.reduce(
+        (counts, topic) => ({
+          ...counts,
+          [topic]: QUESTIONS.filter((question) => question.topic === topic).length,
+        }),
+        {} as Record<Topic, number>
+      ),
+    []
+  );
 
   const startSession = useCallback(
     (overrides?: {
@@ -378,6 +388,8 @@ export default function App() {
           selectedMode={selectedMode}
           selectedFeedbackMode={selectedFeedbackMode}
           selectedTopic={selectedTopic}
+          questionBankTotal={QUESTIONS.length}
+          topicQuestionCounts={topicQuestionCounts}
           themeToggle={themeToggle}
           onModeChange={setSelectedMode}
           onFeedbackModeChange={setSelectedFeedbackMode}
@@ -443,21 +455,17 @@ export default function App() {
 }
 
 function ThemeToggle({ theme, onCycle }: { theme: ThemeMode; onCycle: () => void }) {
-  const label =
-    theme === "system" ? "Auto theme" : theme === "light" ? "Light theme" : "Dark theme";
-  const glyph = theme === "system" ? "🖥" : theme === "light" ? "☀" : "☾";
-  const next =
-    theme === "system" ? "light" : theme === "light" ? "dark" : "auto";
+  const label = theme === "light" ? "Light theme" : "Dark theme";
+  const next = theme === "light" ? "dark" : "light";
   return (
     <button
       type="button"
-      className="icon-button"
+      className="utility-button"
       onClick={onCycle}
       aria-label={`${label}. Switch to ${next} theme.`}
       title={`${label} — click for ${next}`}
     >
-      <span aria-hidden="true">{glyph}</span>
-      <span>{theme === "system" ? "Auto" : theme === "light" ? "Light" : "Dark"}</span>
+      <span>Theme: {theme === "light" ? "Light" : "Dark"}</span>
     </button>
   );
 }
@@ -467,6 +475,8 @@ type HomeViewProps = {
   selectedMode: SessionMode;
   selectedFeedbackMode: FeedbackMode;
   selectedTopic: Topic;
+  questionBankTotal: number;
+  topicQuestionCounts: Record<Topic, number>;
   themeToggle: ReactNode;
   onModeChange: (mode: SessionMode) => void;
   onFeedbackModeChange: (mode: FeedbackMode) => void;
@@ -480,6 +490,8 @@ function HomeView({
   selectedMode,
   selectedFeedbackMode,
   selectedTopic,
+  questionBankTotal,
+  topicQuestionCounts,
   themeToggle,
   onModeChange,
   onFeedbackModeChange,
@@ -568,6 +580,36 @@ function HomeView({
         <button className="primary-button start-button" type="button" onClick={onStart}>
           Start
         </button>
+
+        <div className="bank-strip" aria-label="Question bank coverage">
+          <div>
+            <strong>{questionBankTotal}</strong>
+            <span>original questions</span>
+          </div>
+          <div>
+            <strong>{Math.min(...Object.values(topicQuestionCounts))}</strong>
+            <span>per topic</span>
+          </div>
+          <div>
+            <strong>{selectedMode === "full_mock" ? "21" : "10"}</strong>
+            <span>{selectedMode === "full_mock" ? "mock length" : "drill cap"}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel coverage-panel">
+        <div className="section-heading">
+          <h2>Practice Coverage</h2>
+          <span>Balanced across the PM assessment skills</span>
+        </div>
+        <div className="coverage-grid">
+          {TOPIC_ORDER.map((topic) => (
+            <div className="coverage-chip" key={topic}>
+              <strong>{topicQuestionCounts[topic]}</strong>
+              <span>{TOPIC_LABELS[topic]}</span>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="panel">
@@ -738,9 +780,21 @@ function TestView({
             Q{currentIndex + 1} / {questionCount}
           </span>
           <span>{TOPIC_LABELS[question.topic]}</span>
+          <span>{difficultyLabel(question.difficulty)}</span>
           <span aria-label="Estimated time">{question.estimatedSeconds}s target</span>
         </div>
         <h1>{question.prompt}</h1>
+
+        {isPracticeFeedbackVisible && (
+          <div className={isCorrect ? "feedback correct-feedback" : "feedback wrong-feedback"}>
+            <strong>{isCorrect ? "Correct" : "Incorrect"}</strong>
+            <p>
+              Correct answer: {question.correctChoiceId}.{" "}
+              {getChoiceText(question, question.correctChoiceId)}
+            </p>
+            <p>{question.explanation}</p>
+          </div>
+        )}
 
         <div className="choices" aria-label="Answer choices">
           {question.choices.map((choice, index) => {
@@ -792,17 +846,6 @@ function TestView({
             ))}
           </div>
         </div>
-
-        {isPracticeFeedbackVisible && (
-          <div className={isCorrect ? "feedback correct-feedback" : "feedback wrong-feedback"}>
-            <strong>{isCorrect ? "Correct" : "Incorrect"}</strong>
-            <p>
-              Correct answer: {question.correctChoiceId}.{" "}
-              {getChoiceText(question, question.correctChoiceId)}
-            </p>
-            <p>{question.explanation}</p>
-          </div>
-        )}
 
         <div className="question-actions">
           <button
@@ -900,9 +943,18 @@ function ResultsView({
         <div className="breakdown-table" role="table" aria-label="Topic breakdown">
           <div className="breakdown-row header" role="row">
             <span>Topic</span>
-            <span>Correct</span>
-            <span>Total</span>
-            <span>Percent</span>
+            <span>
+              <span className="breakdown-label-full">Correct</span>
+              <span className="breakdown-label-short">OK</span>
+            </span>
+            <span>
+              <span className="breakdown-label-full">Total</span>
+              <span className="breakdown-label-short">All</span>
+            </span>
+            <span>
+              <span className="breakdown-label-full">Percent</span>
+              <span className="breakdown-label-short">%</span>
+            </span>
           </div>
           {TOPIC_ORDER.map((topic) => {
             const score = attempt.score.topicBreakdown[topic];
