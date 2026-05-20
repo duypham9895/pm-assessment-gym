@@ -186,7 +186,7 @@ p {
 
 .control-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 16px;
   align-items: end;
 }
@@ -309,6 +309,122 @@ select {
   margin-top: 18px;
 }
 
+.start-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.start-panel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.8fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.start-controls {
+  min-width: 0;
+}
+
+.session-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.session-summary div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-summary strong {
+  color: var(--text-strong);
+  font-size: 0.95rem;
+}
+
+.session-summary span {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.next-action {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding-left: 20px;
+  border-left: 1px solid var(--border-soft);
+}
+
+.next-action h2 {
+  margin-bottom: 0;
+  color: var(--text-strong);
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.next-action p {
+  margin-bottom: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.session-guide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.session-guide-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.session-guide-title {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.session-guide dl {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.session-guide dl > div {
+  display: grid;
+  grid-template-columns: minmax(98px, 0.38fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.session-guide dt {
+  color: var(--text-strong);
+  font-weight: 900;
+}
+
+.session-guide dd {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.session-guide dd strong {
+  color: var(--text);
+}
+
 .bank-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -346,6 +462,35 @@ select {
   background:
     linear-gradient(135deg, var(--accent-soft), transparent 42%),
     var(--surface);
+}
+
+.scoring-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.scoring-guide-grid div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 2px solid var(--accent);
+}
+
+.scoring-guide strong {
+  color: var(--text-strong);
+  font-size: 1rem;
+}
+
+.scoring-guide p {
+  margin-bottom: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.scoring-guide--compact {
+  background: var(--surface-elev);
 }
 
 .coverage-grid {
@@ -393,7 +538,7 @@ select {
 
 .attempt-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(120px, 0.7fr) minmax(150px, 1fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(110px, 0.55fr) minmax(140px, 0.85fr) auto;
   gap: 14px;
   align-items: center;
   padding: 14px;
@@ -410,6 +555,16 @@ select {
 .attempt-row span {
   color: var(--text-muted);
   font-size: 0.92rem;
+}
+
+.attempt-action {
+  justify-self: end;
+}
+
+.compact-button {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 0.9rem;
 }
 
 .test-layout {
@@ -789,6 +944,74 @@ select {
   line-height: 1;
 }
 
+.next-plan-panel {
+  background:
+    linear-gradient(135deg, var(--accent-soft), transparent 54%),
+    var(--surface);
+}
+
+.next-plan-list {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.next-plan-item {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 14px;
+  border-top: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.next-plan-item:first-child {
+  border-top: 0;
+}
+
+.next-plan-item > span:first-child {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--on-accent);
+  background: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 900;
+}
+
+.next-plan-item div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.next-plan-item strong {
+  color: var(--text-strong);
+}
+
+.next-plan-item p {
+  margin-bottom: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.plan-metric {
+  justify-self: end;
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: var(--pill-text);
+  background: var(--pill-bg);
+  font-size: 0.82rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .breakdown-table {
   display: grid;
   overflow: hidden;
@@ -1018,12 +1241,23 @@ select {
   }
 
   .control-grid,
+  .start-panel-grid,
+  .session-summary,
+  .session-guide,
   .bank-strip,
   .coverage-grid,
+  .scoring-guide-grid,
   .attempt-row,
   .result-summary,
   .review-card dl {
     grid-template-columns: 1fr;
+  }
+
+  .next-action {
+    padding-top: 16px;
+    padding-left: 0;
+    border-top: 1px solid var(--border-soft);
+    border-left: 0;
   }
 
   .test-bar {
@@ -1060,6 +1294,31 @@ select {
   .panel,
   .framework-doc {
     padding: 16px;
+  }
+
+  .session-guide dl > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .attempt-action {
+    justify-self: stretch;
+  }
+
+  .attempt-action .compact-button {
+    width: 100%;
+  }
+
+  .next-plan-item {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .next-plan-item .compact-button,
+  .plan-metric {
+    grid-column: 2;
+    justify-self: stretch;
+    width: 100%;
+    text-align: center;
   }
 
   .confidence-options {

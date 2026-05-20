@@ -395,6 +395,10 @@ export default function App() {
           onFeedbackModeChange={setSelectedFeedbackMode}
           onTopicChange={setSelectedTopic}
           onStart={() => startSession()}
+          onBaselineMock={() => startSession({ mode: "full_mock", feedbackMode: "exam" })}
+          onWeakTopicDrill={(topic) =>
+            startSession({ mode: "topic_drill", feedbackMode: "practice", topic })
+          }
           onFrameworks={() => setView("frameworks")}
         />
       )}
@@ -434,6 +438,10 @@ export default function App() {
           onDrillWeakest={(topic) =>
             startSession({ mode: "topic_drill", feedbackMode: "practice", topic })
           }
+          onFrameworks={() => {
+            setView("frameworks");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
           onHome={() => {
             setSession(null);
             setView("home");
@@ -482,6 +490,8 @@ type HomeViewProps = {
   onFeedbackModeChange: (mode: FeedbackMode) => void;
   onTopicChange: (topic: Topic) => void;
   onStart: () => void;
+  onBaselineMock: () => void;
+  onWeakTopicDrill: (topic: Topic) => void;
   onFrameworks: () => void;
 };
 
@@ -497,14 +507,27 @@ function HomeView({
   onFeedbackModeChange,
   onTopicChange,
   onStart,
+  onBaselineMock,
+  onWeakTopicDrill,
   onFrameworks,
 }: HomeViewProps) {
+  const latestAttempt = attempts[0];
+  const latestWeakTopic = latestAttempt?.score.weakestTopic;
+  const selectedSessionCopy =
+    selectedMode === "full_mock"
+      ? "21 mixed questions, 30 minutes, best for a readiness baseline."
+      : `10 focused ${TOPIC_LABELS[selectedTopic]} questions with a per-question pace target.`;
+  const feedbackCopy =
+    selectedFeedbackMode === "exam"
+      ? "Exam feedback waits until submit, so the session feels closer to the real assessment."
+      : "Practice feedback explains each answer immediately, so it is better for learning loops.";
+
   return (
     <div className="stack">
       <header className="top-header">
         <div>
           <h1>PM Assessment Gym</h1>
-          <p>Practice mocks for PM assessment readiness</p>
+          <p>Timed drills, weak-topic review, and framework refresh for PM assessments</p>
         </div>
         <div className="header-actions">
           {themeToggle}
@@ -514,72 +537,133 @@ function HomeView({
         </div>
       </header>
 
-      <section className="panel">
-        <div className="control-grid">
-          <div className="control-block">
-            <span className="control-label">Mode</span>
-            <div className="segmented-control" aria-label="Mode">
-              <button
-                type="button"
-                className={selectedMode === "full_mock" ? "active" : ""}
-                aria-pressed={selectedMode === "full_mock"}
-                onClick={() => onModeChange("full_mock")}
-              >
-                Full Mock
-              </button>
-              <button
-                type="button"
-                className={selectedMode === "topic_drill" ? "active" : ""}
-                aria-pressed={selectedMode === "topic_drill"}
-                onClick={() => onModeChange("topic_drill")}
-              >
-                Topic Drill
-              </button>
+      <section className="panel start-panel">
+        <div className="start-panel-grid">
+          <div className="start-controls">
+            <div className="control-grid">
+              <div className="control-block">
+                <span className="control-label">Mode</span>
+                <div className="segmented-control" aria-label="Mode">
+                  <button
+                    type="button"
+                    className={selectedMode === "full_mock" ? "active" : ""}
+                    aria-pressed={selectedMode === "full_mock"}
+                    onClick={() => onModeChange("full_mock")}
+                  >
+                    Full Mock
+                  </button>
+                  <button
+                    type="button"
+                    className={selectedMode === "topic_drill" ? "active" : ""}
+                    aria-pressed={selectedMode === "topic_drill"}
+                    onClick={() => onModeChange("topic_drill")}
+                  >
+                    Topic Drill
+                  </button>
+                </div>
+              </div>
+
+              <div className="control-block">
+                <span className="control-label">Feedback</span>
+                <div className="segmented-control" aria-label="Feedback mode">
+                  <button
+                    type="button"
+                    className={selectedFeedbackMode === "exam" ? "active" : ""}
+                    aria-pressed={selectedFeedbackMode === "exam"}
+                    onClick={() => onFeedbackModeChange("exam")}
+                  >
+                    Exam
+                  </button>
+                  <button
+                    type="button"
+                    className={selectedFeedbackMode === "practice" ? "active" : ""}
+                    aria-pressed={selectedFeedbackMode === "practice"}
+                    onClick={() => onFeedbackModeChange("practice")}
+                  >
+                    Practice
+                  </button>
+                </div>
+              </div>
+
+              {selectedMode === "topic_drill" && (
+                <label className="control-block">
+                  <span className="control-label">Topic</span>
+                  <select
+                    value={selectedTopic}
+                    onChange={(event) => onTopicChange(event.target.value as Topic)}
+                  >
+                    {TOPIC_ORDER.map((topic) => (
+                      <option key={topic} value={topic}>
+                        {TOPIC_LABELS[topic]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
+
+            <div className="session-summary" aria-label="Selected session summary">
+              <div>
+                <strong>{modeLabel(selectedMode)}</strong>
+                <span>{selectedSessionCopy}</span>
+              </div>
+              <div>
+                <strong>{feedbackModeLabel(selectedFeedbackMode)}</strong>
+                <span>{feedbackCopy}</span>
+              </div>
+            </div>
+
+            <button className="primary-button start-button" type="button" onClick={onStart}>
+              Start {selectedMode === "full_mock" ? "full mock" : "topic drill"}
+            </button>
           </div>
 
-          <div className="control-block">
-            <span className="control-label">Feedback</span>
-            <div className="segmented-control" aria-label="Feedback mode">
-              <button
-                type="button"
-                className={selectedFeedbackMode === "exam" ? "active" : ""}
-                aria-pressed={selectedFeedbackMode === "exam"}
-                onClick={() => onFeedbackModeChange("exam")}
-              >
-                Exam
-              </button>
-              <button
-                type="button"
-                className={selectedFeedbackMode === "practice" ? "active" : ""}
-                aria-pressed={selectedFeedbackMode === "practice"}
-                onClick={() => onFeedbackModeChange("practice")}
-              >
-                Practice
-              </button>
-            </div>
-          </div>
-
-          {selectedMode === "topic_drill" && (
-            <label className="control-block">
-              <span className="control-label">Topic</span>
-              <select
-                value={selectedTopic}
-                onChange={(event) => onTopicChange(event.target.value as Topic)}
-              >
-                {TOPIC_ORDER.map((topic) => (
-                  <option key={topic} value={topic}>
-                    {TOPIC_LABELS[topic]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          <aside className="next-action" aria-label="Recommended next action">
+            <span className="control-label">Next best action</span>
+            {latestWeakTopic ? (
+              <>
+                <h2>Repair {TOPIC_LABELS[latestWeakTopic]}</h2>
+                <p>
+                  Your latest {modeLabel(latestAttempt.mode).toLowerCase()} scored{" "}
+                  {latestAttempt.score.percent}%. Drill the weakest topic while the mistakes are
+                  still fresh.
+                </p>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => onWeakTopicDrill(latestWeakTopic)}
+                >
+                  Start practice drill
+                </button>
+              </>
+            ) : attempts.length > 0 ? (
+              <>
+                <h2>Validate with pressure</h2>
+                <p>
+                  No weak topic is standing out from the latest attempt. Run another exam-style
+                  mock to check consistency.
+                </p>
+                <button className="primary-button" type="button" onClick={onBaselineMock}>
+                  Start exam mock
+                </button>
+              </>
+            ) : (
+              <>
+                <h2>Set your baseline</h2>
+                <p>
+                  Start with a full mock in Exam mode. The result will tell you which topic to
+                  drill first.
+                </p>
+                <button className="primary-button" type="button" onClick={onBaselineMock}>
+                  Start baseline mock
+                </button>
+              </>
+            )}
+            <button className="secondary-button" type="button" onClick={onFrameworks}>
+              Refresh frameworks
+            </button>
+          </aside>
         </div>
-
-        <button className="primary-button start-button" type="button" onClick={onStart}>
-          Start
-        </button>
 
         <div className="bank-strip" aria-label="Question bank coverage">
           <div>
@@ -594,21 +678,6 @@ function HomeView({
             <strong>{selectedMode === "full_mock" ? "21" : "10"}</strong>
             <span>{selectedMode === "full_mock" ? "mock length" : "drill cap"}</span>
           </div>
-        </div>
-      </section>
-
-      <section className="panel coverage-panel">
-        <div className="section-heading">
-          <h2>Practice Coverage</h2>
-          <span>Balanced across the PM assessment skills</span>
-        </div>
-        <div className="coverage-grid">
-          {TOPIC_ORDER.map((topic) => (
-            <div className="coverage-chip" key={topic}>
-              <strong>{topicQuestionCounts[topic]}</strong>
-              <span>{TOPIC_LABELS[topic]}</span>
-            </div>
-          ))}
         </div>
       </section>
 
@@ -652,10 +721,74 @@ function HomeView({
                       : "None"}
                   </span>
                 </div>
+                <div className="attempt-action">
+                  {attempt.score.weakestTopic ? (
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      onClick={() => onWeakTopicDrill(attempt.score.weakestTopic!)}
+                    >
+                      Drill
+                    </button>
+                  ) : (
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      onClick={onBaselineMock}
+                    >
+                      Mock
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         )}
+      </section>
+
+      <section className="panel coverage-panel">
+        <div className="section-heading">
+          <h2>Practice Coverage</h2>
+          <span>Balanced across the PM assessment skills</span>
+        </div>
+        <div className="coverage-grid">
+          {TOPIC_ORDER.map((topic) => (
+            <div className="coverage-chip" key={topic}>
+              <strong>{topicQuestionCounts[topic]}</strong>
+              <span>{TOPIC_LABELS[topic]}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel scoring-guide">
+        <div className="section-heading">
+          <h2>How Scoring Works</h2>
+          <span>Score and confidence measure different things</span>
+        </div>
+        <div className="scoring-guide-grid">
+          <div>
+            <strong>Score</strong>
+            <p>
+              Your score is the number of correct answers divided by the total questions.
+              Unanswered questions count as incorrect.
+            </p>
+          </div>
+          <div>
+            <strong>Confidence</strong>
+            <p>
+              Confidence does not change the score. Confident misses rise to the top because
+              they are the easiest mistakes to repeat.
+            </p>
+          </div>
+          <div>
+            <strong>Topic weakness</strong>
+            <p>
+              The weakest topic is the area with the most wrong answers, using percentage
+              and question count as tie breakers.
+            </p>
+          </div>
+        </div>
       </section>
     </div>
   );
@@ -764,8 +897,18 @@ function TestView({
             <p>Q{unansweredWarning.join(", Q")}</p>
           </div>
           <div>
-            <button className="primary-button" type="button" onClick={onDismissSubmitWarning}>
-              Keep answering
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => {
+                onDismissSubmitWarning();
+                onJumpNextUnanswered();
+              }}
+            >
+              Go to first unanswered
+            </button>
+            <button className="secondary-button" type="button" onClick={onDismissSubmitWarning}>
+              Stay here
             </button>
             <button className="secondary-button" type="button" onClick={onSubmitAnyway}>
               Submit anyway
@@ -784,17 +927,6 @@ function TestView({
           <span aria-label="Estimated time">{question.estimatedSeconds}s target</span>
         </div>
         <h1>{question.prompt}</h1>
-
-        {isPracticeFeedbackVisible && (
-          <div className={isCorrect ? "feedback correct-feedback" : "feedback wrong-feedback"}>
-            <strong>{isCorrect ? "Correct" : "Incorrect"}</strong>
-            <p>
-              Correct answer: {question.correctChoiceId}.{" "}
-              {getChoiceText(question, question.correctChoiceId)}
-            </p>
-            <p>{question.explanation}</p>
-          </div>
-        )}
 
         <div className="choices" aria-label="Answer choices">
           {question.choices.map((choice, index) => {
@@ -825,6 +957,20 @@ function TestView({
             );
           })}
         </div>
+
+        {isPracticeFeedbackVisible && (
+          <div
+            className={isCorrect ? "feedback correct-feedback" : "feedback wrong-feedback"}
+            aria-live="polite"
+          >
+            <strong>{isCorrect ? "Correct" : "Incorrect"}</strong>
+            <p>
+              Correct answer: {question.correctChoiceId}.{" "}
+              {getChoiceText(question, question.correctChoiceId)}
+            </p>
+            <p>{question.explanation}</p>
+          </div>
+        )}
 
         <p className="keyboard-hint">
           Tip: press <kbd>1</kbd>–<kbd>5</kbd> to pick a choice.
@@ -888,6 +1034,7 @@ type ResultsViewProps = {
   themeToggle: ReactNode;
   onFullMock: () => void;
   onDrillWeakest: (topic: Topic) => void;
+  onFrameworks: () => void;
   onHome: () => void;
 };
 
@@ -898,8 +1045,13 @@ function ResultsView({
   themeToggle,
   onFullMock,
   onDrillWeakest,
+  onFrameworks,
   onHome,
 }: ResultsViewProps) {
+  const weakestTopic = attempt.score.weakestTopic;
+  const falseConfidenceCount = wrongReviews.filter((review) => review.confidence === 3).length;
+  const unansweredCount = wrongReviews.filter((review) => !review.chosenChoiceId).length;
+
   return (
     <div className="stack">
       <header className="top-header">
@@ -933,6 +1085,86 @@ function ResultsView({
           </strong>
           <span>{wrongReviews.length} wrong</span>
         </div>
+      </section>
+
+      <section className="panel next-plan-panel">
+        <div className="section-heading">
+          <h2>Next Practice Plan</h2>
+          <span>{wrongReviews.length ? "Review first, then drill" : "Protect the baseline"}</span>
+        </div>
+        <div className="next-plan-list">
+          <div className="next-plan-item">
+            <span>1</span>
+            <div>
+              <strong>
+                {weakestTopic ? `Drill ${TOPIC_LABELS[weakestTopic]}` : "Run another exam mock"}
+              </strong>
+              <p>
+                {weakestTopic
+                  ? "Use Practice mode for one focused set before returning to a timed mock."
+                  : "No weak topic stood out. Re-test under pressure to make sure the score holds."}
+              </p>
+            </div>
+            {weakestTopic ? (
+              <button
+                className="primary-button compact-button"
+                type="button"
+                onClick={() => onDrillWeakest(weakestTopic)}
+              >
+                Start drill
+              </button>
+            ) : (
+              <button className="primary-button compact-button" type="button" onClick={onFullMock}>
+                Start mock
+              </button>
+            )}
+          </div>
+
+          <div className="next-plan-item">
+            <span>2</span>
+            <div>
+              <strong>
+                {falseConfidenceCount
+                  ? `Fix ${falseConfidenceCount} confident miss${
+                      falseConfidenceCount === 1 ? "" : "es"
+                    }`
+                  : "Review misses by risk"}
+              </strong>
+              <p>
+                {falseConfidenceCount
+                  ? "Confident wrong answers are the easiest mistakes to repeat, so they stay first in review."
+                  : wrongReviews.length
+                    ? "Wrong answers are already sorted by confidence so the riskiest mistakes come first."
+                    : "No mistakes to review in this attempt."}
+              </p>
+            </div>
+            <span className="plan-metric">
+              {unansweredCount ? `${unansweredCount} unanswered` : `${wrongReviews.length} wrong`}
+            </span>
+          </div>
+
+          <div className="next-plan-item">
+            <span>3</span>
+            <div>
+              <strong>Refresh one framework</strong>
+              <p>Skim the relevant checklist before the next timed session.</p>
+            </div>
+            <button className="secondary-button compact-button" type="button" onClick={onFrameworks}>
+              Frameworks
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel scoring-guide scoring-guide--compact">
+        <div className="section-heading">
+          <h2>How This Score Was Calculated</h2>
+          <span>Confidence is used for review priority</span>
+        </div>
+        <p>
+          Score = correct answers / total questions. Confidence does not change the percentage;
+          confident misses appear first because they are the highest learning risk.
+        </p>
       </section>
 
       <section className="panel">
@@ -973,32 +1205,15 @@ function ResultsView({
 
       <section className="panel">
         <div className="section-heading">
-          <h2>Suggested Drill</h2>
-          <span>
-            {attempt.score.weakestTopic ? TOPIC_LABELS[attempt.score.weakestTopic] : "No weak topic"}
-          </span>
-        </div>
-        {attempt.score.weakestTopic ? (
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => onDrillWeakest(attempt.score.weakestTopic!)}
-          >
-            Drill this topic
-          </button>
-        ) : (
-          <p className="empty-state">Perfect score. Keep the momentum with another mock.</p>
-        )}
-      </section>
-
-      <section className="panel">
-        <div className="section-heading">
-          <h2>Wrong Answer Review</h2>
+          <h2>Mistakes To Fix</h2>
           <span>{correctCount} questions answered correctly (not shown)</span>
         </div>
 
         {wrongReviews.length === 0 ? (
-          <p className="empty-state">No wrong answers in this attempt.</p>
+          <p className="empty-state">
+            No wrong answers in this attempt. Run another mock or refresh frameworks to keep the
+            recall sharp.
+          </p>
         ) : (
           <div className="review-list">
             {wrongReviews.map((review) => (
@@ -1009,18 +1224,27 @@ function ResultsView({
       </section>
 
       <div className="result-actions">
-        <button className="primary-button" type="button" onClick={onFullMock}>
-          Start another full mock
-        </button>
-        {attempt.score.weakestTopic && (
+        {weakestTopic ? (
           <button
-            className="secondary-button"
+            className="primary-button"
             type="button"
-            onClick={() => onDrillWeakest(attempt.score.weakestTopic!)}
+            onClick={() => onDrillWeakest(weakestTopic)}
           >
             Drill weakest topic
           </button>
+        ) : (
+          <button className="primary-button" type="button" onClick={onFullMock}>
+            Start another full mock
+          </button>
         )}
+        {weakestTopic && (
+          <button className="secondary-button" type="button" onClick={onFullMock}>
+            Start another full mock
+          </button>
+        )}
+        <button className="secondary-button" type="button" onClick={onFrameworks}>
+          Refresh frameworks
+        </button>
         <button className="secondary-button" type="button" onClick={onHome}>
           Back home
         </button>
