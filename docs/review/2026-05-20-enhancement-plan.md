@@ -28,7 +28,7 @@ Home should lead with a recommendation such as "Start baseline mock" or "Drill A
 The submit warning lists unanswered questions, but it should let Edward jump directly to the first unanswered question or any listed question. This preserves focus under time pressure.
 
 **P1: Make latest attempts interpretable without mental math.**  
-Recent attempts should show trend and implication, not only raw score. Example: "0/21 · Baseline incomplete · Retry full mock" or "14/21 · Weakest: Data Literacy · Drill next."
+Recent attempts should show trend and implication, not only raw score. Example: "0/20 · Baseline incomplete · Retry full mock" or "14/20 · Weakest: Data Literacy · Drill next."
 
 **P1: Keep dense, calm layouts.**  
 The current restrained style is directionally right. Improve hierarchy with compact recommendation strips, clearer primary buttons, and less explanatory content above the fold.

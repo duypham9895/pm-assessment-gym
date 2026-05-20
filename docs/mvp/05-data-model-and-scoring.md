@@ -131,14 +131,14 @@ The full mock should match the boss skill:
 export const FULL_MOCK_DISTRIBUTION: Record<Topic, number> = {
   product_analytics: 4,
   data_literacy: 3,
-  chart_interpretation: 4,
+  chart_interpretation: 3,
   inductive_reasoning: 3,
-  data_interpretation: 4,
-  ab_testing: 3,
+  data_interpretation: 3,
+  ab_testing: 4,
 };
 ```
 
-Total = 21 questions.
+Total = 20 questions.
 
 ## Scoring Rules
 

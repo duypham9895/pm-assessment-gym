@@ -10,7 +10,7 @@ Before exam day, content quality matters more than UI polish.
 
 ### Absolute Minimum
 
-- 21 questions total.
+- 20 questions total.
 - Exact boss-skill topic distribution:
   - Product Analytics: 4.
   - Data Literacy: 3.
@@ -260,7 +260,7 @@ Add to `src/questions.ts`.
 
 ## Content Priority Before exam day
 
-1. 21-question full mock.
+1. 20-question full mock.
 2. Extra A/B Testing questions.
 3. Extra Product Analytics questions.
 4. Extra Data Interpretation questions.
@@ -279,7 +279,7 @@ Add to `src/questions.ts`.
 
 ### Tuesday
 
-- Finish enough questions to reach at least 21.
+- Finish enough questions to reach at least 20.
 - If possible, reach 30 questions before doing polish.
 - Add questions to `src/questions.ts`.
 
@@ -297,7 +297,7 @@ Add to `src/questions.ts`.
 
 Content is ready enough if:
 
-- At least 21 questions exist.
+- At least 20 questions exist.
 - Distribution matches the boss skill.
 - Every question has explanation and concept tags.
 - Edward can run one full mock and learn from the result.

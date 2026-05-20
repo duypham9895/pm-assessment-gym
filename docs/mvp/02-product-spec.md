@@ -38,17 +38,17 @@ The app should support these topics:
 
 Purpose:
 
-- Simulate the boss skill's 21-question Senior PM assessment.
+- Simulate a screening-style Senior PM assessment with 20 questions.
 
 Behavior:
 
 - Uses the correct topic distribution:
   - Product Analytics: 4.
   - Data Literacy: 3.
-  - Chart Interpretation: 4.
+  - Chart Interpretation: 3.
   - Inductive Reasoning: 3.
-  - Data Interpretation: 4.
-  - A/B Testing: 3.
+  - Data Interpretation: 3.
+  - A/B Testing: 4.
 - Default timer: 30 minutes.
 - User can navigate freely.
 - User submits and receives results.
@@ -156,7 +156,7 @@ Support fast, focused question answering under time pressure.
   - Previous.
   - Next.
 - Question counter:
-  - `Q3 / 21`.
+  - `Q3 / 20`.
 - Confidence control:
   - `1 Guessing`.
   - `2 Unsure`.
@@ -179,7 +179,7 @@ Turn test performance into the next practice action.
 ### Required UI
 
 - Score card:
-  - `Score: 16/21`.
+  - `Score: 16/20`.
   - `76%`.
 - Topic breakdown:
   - Topic.

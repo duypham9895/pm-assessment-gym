@@ -41,6 +41,7 @@ const warnings = [];
 const choiceIds = ["A", "B", "C", "D", "E"];
 const expectedTopicCount = 20;
 const expectedTotal = TOPIC_ORDER.length * expectedTopicCount;
+const expectedFullMockLength = 20;
 
 function recordError(message) {
   errors.push(message);
@@ -126,6 +127,24 @@ if (!Array.isArray(QUESTIONS)) {
     if (available < needed) {
       recordError(`${topic} has ${available} questions but full mock needs ${needed}.`);
     }
+  }
+
+  const fullMockLength = TOPIC_ORDER.reduce(
+    (total, topic) => total + (FULL_MOCK_DISTRIBUTION[topic] ?? 0),
+    0
+  );
+  const fullMockCounts = TOPIC_ORDER.map((topic) => FULL_MOCK_DISTRIBUTION[topic] ?? 0);
+  const lowestTopicMockCount = Math.min(...fullMockCounts);
+  const highestTopicMockCount = Math.max(...fullMockCounts);
+
+  if (fullMockLength !== expectedFullMockLength) {
+    recordError(
+      `Expected full mock to use ${expectedFullMockLength} questions, distribution uses ${fullMockLength}.`
+    );
+  }
+
+  if (lowestTopicMockCount < 3 || highestTopicMockCount - lowestTopicMockCount > 1) {
+    recordError("Full mock distribution should keep every topic within a 3-4 question band.");
   }
 
   const expectedPerLetter = QUESTIONS.length / choiceIds.length;

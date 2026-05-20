@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FRAMEWORKS_MARKDOWN } from "./frameworks";
-import { QUESTIONS, TOPIC_LABELS, TOPIC_ORDER } from "./questions";
+import { FULL_MOCK_QUESTION_COUNT, QUESTIONS, TOPIC_LABELS, TOPIC_ORDER } from "./questions";
 import {
   buildQuestionReviews,
   getWrongReviewsByPriority,
@@ -515,7 +515,7 @@ function HomeView({
   const latestWeakTopic = latestAttempt?.score.weakestTopic;
   const selectedSessionCopy =
     selectedMode === "full_mock"
-      ? "21 mixed questions, 30 minutes, best for a readiness baseline."
+      ? `${FULL_MOCK_QUESTION_COUNT} mixed questions, 30 minutes, best for a readiness baseline.`
       : `10 focused ${TOPIC_LABELS[selectedTopic]} questions with a per-question pace target.`;
   const feedbackCopy =
     selectedFeedbackMode === "exam"
@@ -675,7 +675,7 @@ function HomeView({
             <span>per topic</span>
           </div>
           <div>
-            <strong>{selectedMode === "full_mock" ? "21" : "10"}</strong>
+            <strong>{selectedMode === "full_mock" ? FULL_MOCK_QUESTION_COUNT : "10"}</strong>
             <span>{selectedMode === "full_mock" ? "mock length" : "drill cap"}</span>
           </div>
         </div>

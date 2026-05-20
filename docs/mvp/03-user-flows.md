@@ -12,7 +12,7 @@ Steps:
 2. Select `Full Mock`.
 3. Select `Exam Mode`.
 4. Click `Start`.
-5. Answer all 21 questions.
+5. Answer all 20 questions.
 6. Mark confidence for uncertain questions.
 7. Submit before timer ends.
 8. Review score.

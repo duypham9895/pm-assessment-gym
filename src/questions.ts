@@ -21,11 +21,16 @@ export const TOPIC_ORDER: Topic[] = [
 export const FULL_MOCK_DISTRIBUTION: Record<Topic, number> = {
   product_analytics: 4,
   data_literacy: 3,
-  chart_interpretation: 4,
+  chart_interpretation: 3,
   inductive_reasoning: 3,
-  data_interpretation: 4,
-  ab_testing: 3,
+  data_interpretation: 3,
+  ab_testing: 4,
 };
+
+export const FULL_MOCK_QUESTION_COUNT = TOPIC_ORDER.reduce(
+  (total, topic) => total + FULL_MOCK_DISTRIBUTION[topic],
+  0
+);
 
 const SEED_QUESTIONS: Question[] = [
   {

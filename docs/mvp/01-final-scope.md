@@ -14,7 +14,7 @@ The app should be usable by Tuesday night or Wednesday at the latest. It should 
 
 PM Assessment Gym lets Edward:
 
-- Take a 21-question PM mock test under a timer.
+- Take a 20-question PM mock test under a timer.
 - Practice one PM topic at a time.
 - Switch between exam mode and practice mode.
 - Review score, topic breakdown, and explanations.
