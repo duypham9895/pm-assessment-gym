@@ -673,9 +673,9 @@ select {
 }
 
 .nav-pill--answered {
-  border-color: var(--success-border);
-  color: var(--success-strong);
-  background: var(--success-soft);
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--surface-muted);
 }
 
 .nav-pill--current {
@@ -807,6 +807,21 @@ select {
   background: var(--accent-soft);
 }
 
+.choice-button:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.choice-button:disabled:not(.selected):not(.correct):not(.wrong) {
+  color: var(--text-muted);
+  background: var(--surface-elev);
+}
+
+.choice-button:disabled:not(.selected):not(.correct):not(.wrong):hover {
+  border-color: var(--border);
+  background: var(--surface-elev);
+}
+
 .choice-button.selected .choice-letter {
   color: var(--on-accent);
   background: var(--accent);
@@ -841,6 +856,11 @@ select {
   display: grid;
   gap: 8px;
   margin-top: 20px;
+}
+
+.confidence-options button:disabled {
+  cursor: not-allowed;
+  opacity: 1;
 }
 
 .feedback {
