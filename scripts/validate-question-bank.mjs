@@ -48,6 +48,15 @@ const difficultyIds = ["easy", "medium", "hard"];
 const expectedTopicCount = 20;
 const expectedTotal = TOPIC_ORDER.length * expectedTopicCount;
 const expectedFullMockLength = 21;
+const weakDistractorPhrases = [
+  "app's color palette",
+  "logo color",
+  "number of engineers",
+  "number of app store reviews",
+  "hide",
+  "stop measuring",
+  "ignore the chart",
+];
 
 function recordError(message) {
   errors.push(message);
@@ -103,6 +112,15 @@ if (!Array.isArray(QUESTIONS)) {
     const choiceTexts = question.choices.map((choice) => choice.text.trim().toLowerCase());
     if (new Set(choiceTexts).size !== choiceTexts.length) {
       recordError(`${question.id} has duplicate choice text.`);
+    }
+
+    for (const choice of question.choices) {
+      const normalizedChoice = choice.text.trim().toLowerCase();
+      for (const phrase of weakDistractorPhrases) {
+        if (normalizedChoice.includes(phrase)) {
+          recordWarning(`${question.id} has a weak distractor phrase: "${phrase}".`);
+        }
+      }
     }
 
     if (!question.prompt || question.prompt.length < 50) {

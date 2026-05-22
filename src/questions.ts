@@ -224,10 +224,10 @@ const SEED_QUESTIONS: Question[] = [
       "A fraud model flags 90% of fraudulent transactions, but fraud is only 1% of all transactions. What must the PM consider before celebrating a high alert count?",
     choices: [
       { id: "A", text: "Base rates and the false positive burden on operations." },
-      { id: "B", text: "Only the model's true positive rate." },
-      { id: "C", text: "The app's color palette." },
-      { id: "D", text: "Whether total transactions are growing." },
-      { id: "E", text: "The number of engineers on the team." },
+      { id: "B", text: "Only recall, because catching most fraud is enough to judge success." },
+      { id: "C", text: "Only total alert volume, because more alerts always means more fraud found." },
+      { id: "D", text: "Week-over-week flagged transactions without normalizing by transaction volume." },
+      { id: "E", text: "Whether the model score improved on the training data only." },
     ],
     correctChoiceId: "A",
     explanation:
