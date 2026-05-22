@@ -21,10 +21,22 @@ export const TOPIC_ORDER: Topic[] = [
 export const FULL_MOCK_DISTRIBUTION: Record<Topic, number> = {
   product_analytics: 4,
   data_literacy: 3,
-  chart_interpretation: 3,
+  chart_interpretation: 4,
   inductive_reasoning: 3,
-  data_interpretation: 3,
-  ab_testing: 4,
+  data_interpretation: 4,
+  ab_testing: 3,
+};
+
+export const FULL_MOCK_DIFFICULTY_DISTRIBUTION: Record<
+  Topic,
+  Partial<Record<Question["difficulty"], number>>
+> = {
+  product_analytics: { medium: 3, hard: 1 },
+  data_literacy: { medium: 2, hard: 1 },
+  chart_interpretation: { medium: 3, hard: 1 },
+  inductive_reasoning: { medium: 2, hard: 1 },
+  data_interpretation: { easy: 1, medium: 2, hard: 1 },
+  ab_testing: { easy: 1, medium: 1, hard: 1 },
 };
 
 export const FULL_MOCK_QUESTION_COUNT = TOPIC_ORDER.reduce(

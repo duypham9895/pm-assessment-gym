@@ -34,14 +34,20 @@ const sandbox = {
 
 vm.runInNewContext(transpiled.outputText, sandbox, { filename: questionsPath });
 
-const { FULL_MOCK_DISTRIBUTION, QUESTIONS, TOPIC_ORDER } = sandbox.module.exports;
+const {
+  FULL_MOCK_DIFFICULTY_DISTRIBUTION,
+  FULL_MOCK_DISTRIBUTION,
+  QUESTIONS,
+  TOPIC_ORDER,
+} = sandbox.module.exports;
 const errors = [];
 const warnings = [];
 
 const choiceIds = ["A", "B", "C", "D", "E"];
+const difficultyIds = ["easy", "medium", "hard"];
 const expectedTopicCount = 20;
 const expectedTotal = TOPIC_ORDER.length * expectedTopicCount;
-const expectedFullMockLength = 20;
+const expectedFullMockLength = 21;
 
 function recordError(message) {
   errors.push(message);
@@ -49,6 +55,10 @@ function recordError(message) {
 
 function recordWarning(message) {
   warnings.push(message);
+}
+
+function isPlainDistribution(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 if (!Array.isArray(QUESTIONS)) {
@@ -140,6 +150,59 @@ if (!Array.isArray(QUESTIONS)) {
   if (fullMockLength !== expectedFullMockLength) {
     recordError(
       `Expected full mock to use ${expectedFullMockLength} questions, distribution uses ${fullMockLength}.`
+    );
+  }
+
+  for (const topic of TOPIC_ORDER) {
+    const difficultyDistribution = FULL_MOCK_DIFFICULTY_DISTRIBUTION?.[topic];
+
+    if (!isPlainDistribution(difficultyDistribution)) {
+      recordError(`${topic} must have a full mock difficulty distribution object.`);
+      continue;
+    }
+
+    let topicDifficultyTotal = 0;
+
+    for (const [difficulty, count] of Object.entries(difficultyDistribution)) {
+      if (!difficultyIds.includes(difficulty)) {
+        recordError(`${topic} full mock difficulty distribution has invalid difficulty: ${difficulty}.`);
+      }
+
+      if (!Number.isInteger(count) || count < 0) {
+        recordError(
+          `${topic} full mock difficulty distribution ${difficulty} count must be a non-negative integer.`
+        );
+        continue;
+      }
+
+      topicDifficultyTotal += count;
+
+      const available = QUESTIONS.filter(
+        (question) => question.topic === topic && question.difficulty === difficulty
+      ).length;
+
+      if (available < count) {
+        recordError(
+          `${topic} has ${available} ${difficulty} questions but full mock difficulty distribution needs ${count}.`
+        );
+      }
+    }
+
+    const needed = FULL_MOCK_DISTRIBUTION[topic] ?? 0;
+    if (topicDifficultyTotal !== needed) {
+      recordError(
+        `${topic} full mock difficulty distribution uses ${topicDifficultyTotal} questions, but full mock distribution needs ${needed}.`
+      );
+    }
+  }
+
+  const expectedDifficultyTotal = Object.values(FULL_MOCK_DIFFICULTY_DISTRIBUTION ?? {})
+    .flatMap((distribution) => (isPlainDistribution(distribution) ? Object.values(distribution) : []))
+    .reduce((total, count) => (Number.isInteger(count) && count >= 0 ? total + count : total), 0);
+
+  if (expectedDifficultyTotal !== expectedFullMockLength) {
+    recordError(
+      `Expected full mock difficulty distribution to use ${expectedFullMockLength} questions, found ${expectedDifficultyTotal}.`
     );
   }
 

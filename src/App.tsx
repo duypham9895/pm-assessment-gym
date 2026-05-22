@@ -167,9 +167,12 @@ export default function App() {
       const nextMode = overrides?.mode ?? selectedMode;
       const nextFeedbackMode = overrides?.feedbackMode ?? selectedFeedbackMode;
       const nextTopic = overrides?.topic ?? selectedTopic;
+      const recentQuestionIds = new Set(
+        attempts.slice(0, 3).flatMap((attempt) => attempt.questionIds)
+      );
       const nextQuestions =
         nextMode === "full_mock"
-          ? selectFullMockQuestions(QUESTIONS)
+          ? selectFullMockQuestions(QUESTIONS, { recentQuestionIds })
           : selectTopicQuestions(QUESTIONS, nextTopic);
 
       if (nextQuestions.length === 0) {
@@ -204,7 +207,7 @@ export default function App() {
       setView("test");
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [selectedFeedbackMode, selectedMode, selectedTopic]
+    [attempts, selectedFeedbackMode, selectedMode, selectedTopic]
   );
 
   const submitSession = useCallback(
