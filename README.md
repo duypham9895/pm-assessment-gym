@@ -9,7 +9,7 @@ Auto-deploys to Vercel on every push to `main`. Pull requests get their own prev
 ## Features
 
 - **Full Mock** and **Topic Drill** modes with **Exam** or **Practice** feedback
-- 21-question Alvin-style mock with a 30-minute timer and auto-submit
+- 21-question Alvin-style mock with a 30-minute timer, auto-submit, and clear 4/3/4/3/4/3 topic weighting
 - 120 original practice questions, balanced across topics and answer positions
 - Question navigator (jump to any question) and "Next unanswered" jump
 - Practice mode shows the correct answer + explanation immediately
@@ -32,6 +32,21 @@ Then open the URL Vite prints (default `http://localhost:5173`).
 
 - **Full Mock** — 21 questions across all topics, 30 minute timer, exam-style feedback at the end.
 - **Topic Drill** — 10 questions on one topic, 90 seconds per question, with optional practice-mode inline feedback.
+
+## Why 21 questions?
+
+The Full Mock uses 21 questions because it is the smallest clean length for the intended six-skill shape: `4 / 3 / 4 / 3 / 4 / 3`.
+
+That gives every skill at least 3 questions while adding one extra question to the interpretation-heavy areas:
+
+- Product Analytics: 4
+- Data Literacy: 3
+- Chart Interpretation: 4
+- Inductive Reasoning: 3
+- Data Interpretation: 4
+- A/B Testing: 3
+
+With 20 questions, one skill has to be underweighted or the extra weight lands on the wrong area. With 30 questions, the mock becomes a longer endurance session instead of a focused 30-minute readiness check. At 21 questions, the timer stays realistic at about 85 seconds per question while preserving the calibrated topic mix.
 
 ## Build
 

@@ -626,6 +626,18 @@ function HomeView({
               </div>
             </div>
 
+            {selectedMode === "full_mock" && (
+              <div className="mock-rationale" aria-label="Why the full mock uses 21 questions">
+                <strong>Why 21?</strong>
+                <span>
+                  It is the smallest clean six-skill mix: 4/3/4/3/4/3. Twenty questions
+                  underweights one skill, while 30 turns this into a longer endurance mock.
+                  Twenty-one keeps the 30-minute baseline focused at about 85 seconds per
+                  question.
+                </span>
+              </div>
+            )}
+
             <button className="primary-button start-button" type="button" onClick={onStart}>
               Start {selectedMode === "full_mock" ? "full mock" : "topic drill"}
             </button>
