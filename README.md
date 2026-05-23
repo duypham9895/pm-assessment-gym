@@ -9,7 +9,7 @@ Auto-deploys to Vercel on every push to `main`. Pull requests get their own prev
 ## Features
 
 - **Full Mock** and **Topic Drill** modes with **Exam** or **Practice** feedback
-- 20-question mock with a 30-minute timer and auto-submit
+- 21-question Alvin-style mock with a 30-minute timer and auto-submit
 - 120 original practice questions, balanced across topics and answer positions
 - Question navigator (jump to any question) and "Next unanswered" jump
 - Practice mode shows the correct answer + explanation immediately
@@ -30,7 +30,7 @@ Then open the URL Vite prints (default `http://localhost:5173`).
 
 ## Modes
 
-- **Full Mock** — 20 questions across all topics, 30 minute timer, exam-style feedback at the end.
+- **Full Mock** — 21 questions across all topics, 30 minute timer, exam-style feedback at the end.
 - **Topic Drill** — 10 questions on one topic, 90 seconds per question, with optional practice-mode inline feedback.
 
 ## Build

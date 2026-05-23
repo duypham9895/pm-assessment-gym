@@ -109,6 +109,10 @@ function getChoiceText(question: Question, choiceId?: ChoiceId) {
   return question.choices.find((choice) => choice.id === choiceId)?.text ?? "Unknown choice";
 }
 
+function isPracticeAnswerLocked(session: TestSession, questionId: string) {
+  return session.feedbackMode === "practice" && Boolean(session.answers[questionId]);
+}
+
 export default function App() {
   const [view, setView] = useState<View>("home");
   const [attempts, setAttempts] = useState<Attempt[]>(() => loadAttempts());
@@ -163,9 +167,12 @@ export default function App() {
       const nextMode = overrides?.mode ?? selectedMode;
       const nextFeedbackMode = overrides?.feedbackMode ?? selectedFeedbackMode;
       const nextTopic = overrides?.topic ?? selectedTopic;
+      const recentQuestionIds = new Set(
+        attempts.slice(0, 3).flatMap((attempt) => attempt.questionIds)
+      );
       const nextQuestions =
         nextMode === "full_mock"
-          ? selectFullMockQuestions(QUESTIONS)
+          ? selectFullMockQuestions(QUESTIONS, { recentQuestionIds })
           : selectTopicQuestions(QUESTIONS, nextTopic);
 
       if (nextQuestions.length === 0) {
@@ -200,7 +207,7 @@ export default function App() {
       setView("test");
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [selectedFeedbackMode, selectedMode, selectedTopic]
+    [attempts, selectedFeedbackMode, selectedMode, selectedTopic]
   );
 
   const submitSession = useCallback(
@@ -251,6 +258,8 @@ export default function App() {
         if (!previous) return previous;
         const questionId = previous.questionIds[previous.currentQuestionIndex];
         const previousAnswer = previous.answers[questionId];
+        if (isPracticeAnswerLocked(previous, questionId)) return previous;
+
         return {
           ...previous,
           answers: {
@@ -277,6 +286,7 @@ export default function App() {
         const questionId = previous.questionIds[previous.currentQuestionIndex];
         const previousAnswer = previous.answers[questionId];
         if (!previousAnswer) return previous;
+        if (isPracticeAnswerLocked(previous, questionId)) return previous;
 
         return {
           ...previous,
@@ -411,6 +421,9 @@ export default function App() {
             currentAnswer?.confidence ?? confidenceDrafts[currentQuestion.id] ?? 2
           }
           currentIndex={session.currentQuestionIndex}
+          isAnswerLocked={
+            currentQuestion ? isPracticeAnswerLocked(session, currentQuestion.id) : false
+          }
           question={currentQuestion}
           questions={selectedQuestions}
           questionCount={selectedQuestions.length}
@@ -799,6 +812,7 @@ type TestViewProps = {
   answeredCount: number;
   currentConfidence: Confidence;
   currentIndex: number;
+  isAnswerLocked: boolean;
   question: Question;
   questions: Question[];
   questionCount: number;
@@ -820,6 +834,7 @@ function TestView({
   answeredCount,
   currentConfidence,
   currentIndex,
+  isAnswerLocked,
   question,
   questions,
   questionCount,
@@ -946,6 +961,7 @@ function TestView({
                 key={choice.id}
                 type="button"
                 aria-label={`Choice ${choice.id} (press ${index + 1}): ${choice.text}`}
+                disabled={isAnswerLocked}
                 onClick={() => onAnswer(choice.id)}
               >
                 <span className="choice-letter">
@@ -985,6 +1001,7 @@ function TestView({
                 key={confidence}
                 type="button"
                 aria-pressed={currentConfidence === confidence}
+                disabled={isAnswerLocked}
                 onClick={() => onConfidence(confidence)}
               >
                 {confidenceLabel(confidence)}
