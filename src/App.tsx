@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FRAMEWORKS_MARKDOWN } from "./frameworks";
 import { FULL_MOCK_QUESTION_COUNT, QUESTIONS, TOPIC_LABELS, TOPIC_ORDER } from "./questions";
@@ -9,7 +9,15 @@ import {
   selectFullMockQuestions,
   selectTopicQuestions,
 } from "./scoring";
-import { loadAttempts, saveAttempt } from "./storage";
+import { CONFIDENCE_SHORTCUTS, getGlobalShortcutAction, SHORTCUT_DEFINITIONS } from "./shortcuts";
+import {
+  loadAttempts,
+  loadKeyboardTipDismissed,
+  loadShortcutModeEnabled,
+  saveAttempt,
+  saveKeyboardTipDismissed,
+  saveShortcutModeEnabled,
+} from "./storage";
 import type {
   Attempt,
   ChoiceId,
@@ -25,7 +33,6 @@ import type {
 type View = "home" | "test" | "results" | "frameworks";
 type ThemeMode = "light" | "dark";
 
-const CHOICE_IDS: ChoiceId[] = ["A", "B", "C", "D", "E"];
 const QUESTION_BY_ID = new Map(QUESTIONS.map((question) => [question.id, question]));
 const THEME_KEY = "pm-assessment-theme-v1";
 
@@ -98,6 +105,12 @@ function confidenceLabel(confidence?: Confidence) {
   return "2 Unsure";
 }
 
+function confidenceName(confidence: Confidence) {
+  if (confidence === 1) return "Guessing";
+  if (confidence === 3) return "Confident";
+  return "Unsure";
+}
+
 function getQuestionsFromAttempt(attempt: Attempt) {
   return attempt.questionIds
     .map((questionId) => QUESTION_BY_ID.get(questionId))
@@ -126,6 +139,15 @@ export default function App() {
   const [confidenceDrafts, setConfidenceDrafts] = useState<Record<string, Confidence>>({});
   const [unansweredWarning, setUnansweredWarning] = useState<number[] | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => loadTheme());
+  const [keyboardTipDismissed, setKeyboardTipDismissed] = useState(() =>
+    loadKeyboardTipDismissed()
+  );
+  const [shortcutModeEnabled, setShortcutModeEnabled] = useState(() =>
+    loadShortcutModeEnabled()
+  );
+  const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
+  const questionHeadingRef = useRef<HTMLHeadingElement>(null);
+  const shortcutHelpOpenerRef = useRef<HTMLElement | null>(null);
   const submittedSessionIds = useRef(new Set<string>());
 
   useEffect(() => {
@@ -136,6 +158,32 @@ export default function App() {
 
   const cycleTheme = useCallback(() => {
     setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  }, []);
+
+  useEffect(() => {
+    saveShortcutModeEnabled(shortcutModeEnabled);
+  }, [shortcutModeEnabled]);
+
+  const dismissKeyboardTip = useCallback(() => {
+    setKeyboardTipDismissed(true);
+    saveKeyboardTipDismissed(true);
+  }, []);
+
+  const openShortcuts = useCallback(() => {
+    shortcutHelpOpenerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setIsShortcutHelpOpen(true);
+  }, []);
+
+  const closeShortcuts = useCallback(() => {
+    setIsShortcutHelpOpen(false);
+    window.setTimeout(() => {
+      const opener = shortcutHelpOpenerRef.current;
+      if (opener?.isConnected) {
+        opener.focus();
+      }
+      shortcutHelpOpenerRef.current = null;
+    }, 0);
   }, []);
 
   const currentQuestion = session
@@ -279,6 +327,8 @@ export default function App() {
     (confidence: Confidence) => {
       if (!session) return;
       const activeQuestionId = session.questionIds[session.currentQuestionIndex];
+      if (isPracticeAnswerLocked(session, activeQuestionId)) return;
+
       setConfidenceDrafts((drafts) => ({ ...drafts, [activeQuestionId]: confidence }));
 
       setSession((previous) => {
@@ -352,23 +402,52 @@ export default function App() {
 
   useEffect(() => {
     if (view !== "test" || !session) return;
+    questionHeadingRef.current?.focus({ preventScroll: true });
+  }, [session?.currentQuestionIndex, view]);
+
+  useEffect(() => {
+    if (view !== "test" || !session) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select")) return;
+      const action = getGlobalShortcutAction(event, { shortcutModeEnabled });
+      if (!action) return;
 
-      const choiceIndex = Number(event.key) - 1;
-      const choiceId = CHOICE_IDS[choiceIndex];
-      if (choiceId) {
+      if (action.type === "confidence") {
+        const questionId = session.questionIds[session.currentQuestionIndex];
+        if (isPracticeAnswerLocked(session, questionId)) return;
+      }
+
+      if (action.type !== "openHelp") {
         event.preventDefault();
-        selectChoice(choiceId);
+      }
+
+      if (action.type === "answer") {
+        selectChoice(action.choiceId);
+      } else if (action.type === "confidence") {
+        setCurrentConfidence(action.confidence);
+      } else if (action.type === "previousQuestion") {
+        moveQuestion(-1);
+      } else if (action.type === "nextQuestion") {
+        moveQuestion(1);
+      } else if (action.type === "nextUnanswered") {
+        jumpToNextUnanswered();
+      } else if (action.type === "openHelp") {
+        openShortcuts();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectChoice, session, view]);
+  }, [
+    jumpToNextUnanswered,
+    moveQuestion,
+    openShortcuts,
+    selectChoice,
+    session,
+    setCurrentConfidence,
+    shortcutModeEnabled,
+    view,
+  ]);
 
   const resultData = useMemo(() => {
     if (!latestAttempt) {
@@ -424,18 +503,23 @@ export default function App() {
           isAnswerLocked={
             currentQuestion ? isPracticeAnswerLocked(session, currentQuestion.id) : false
           }
+          keyboardTipDismissed={keyboardTipDismissed}
           question={currentQuestion}
           questions={selectedQuestions}
           questionCount={selectedQuestions.length}
           remainingSeconds={remainingSeconds}
           session={session}
+          shortcutModeEnabled={shortcutModeEnabled}
           unansweredWarning={unansweredWarning}
           onAnswer={selectChoice}
           onConfidence={setCurrentConfidence}
+          onDismissKeyboardTip={dismissKeyboardTip}
           onDismissSubmitWarning={() => setUnansweredWarning(null)}
           onJump={jumpToQuestion}
           onJumpNextUnanswered={jumpToNextUnanswered}
           onMove={moveQuestion}
+          onOpenShortcuts={openShortcuts}
+          questionHeadingRef={questionHeadingRef}
           onSubmit={() => submitSession()}
           onSubmitAnyway={() => submitSession({ skipUnansweredWarning: true })}
         />
@@ -471,7 +555,159 @@ export default function App() {
           }}
         />
       )}
+
+      {isShortcutHelpOpen && (
+        <ShortcutsHelpOverlay
+          shortcutModeEnabled={shortcutModeEnabled}
+          onShortcutModeChange={setShortcutModeEnabled}
+          onClose={closeShortcuts}
+        />
+      )}
     </main>
+  );
+}
+
+const FOCUSABLE_SELECTOR =
+  "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
+
+function getFocusableElements(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (element) =>
+      !element.hasAttribute("disabled") &&
+      element.getAttribute("aria-hidden") !== "true" &&
+      element.getAttribute("hidden") === null
+  );
+}
+
+function ShortcutsHelpOverlay({
+  shortcutModeEnabled,
+  onShortcutModeChange,
+  onClose,
+}: {
+  shortcutModeEnabled: boolean;
+  onShortcutModeChange: (enabled: boolean) => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const groups = useMemo(() => {
+    return SHORTCUT_DEFINITIONS.reduce(
+      (result, shortcut) => {
+        const existing = result.find((group) => group.name === shortcut.group);
+        if (existing) {
+          existing.shortcuts.push(shortcut);
+        } else {
+          result.push({ name: shortcut.group, shortcuts: [shortcut] });
+        }
+        return result;
+      },
+      [] as Array<{ name: string; shortcuts: Array<(typeof SHORTCUT_DEFINITIONS)[number]> }>
+    );
+  }, []);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const focusableElements = getFocusableElements(dialog);
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      return;
+    }
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+
+    if (event.shiftKey && document.activeElement === firstElement) {
+      event.preventDefault();
+      lastElement.focus();
+    } else if (!event.shiftKey && document.activeElement === lastElement) {
+      event.preventDefault();
+      firstElement.focus();
+    }
+  };
+
+  return (
+    <div className="shortcut-overlay" onKeyDown={handleKeyDown}>
+      <div
+        className="shortcut-dialog"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shortcut-dialog-title"
+      >
+        <div className="shortcut-dialog-header">
+          <div>
+            <h2 id="shortcut-dialog-title">Keyboard shortcuts</h2>
+            <p>Control printable shortcuts without turning off arrow-key navigation.</p>
+          </div>
+        </div>
+
+        <div className="shortcut-setting">
+          <span className="control-label">Keyboard shortcuts</span>
+          <div className="segmented-control" aria-label="Keyboard shortcuts">
+            <button
+              type="button"
+              className={shortcutModeEnabled ? "active" : ""}
+              aria-pressed={shortcutModeEnabled}
+              onClick={() => onShortcutModeChange(true)}
+            >
+              On
+            </button>
+            <button
+              type="button"
+              className={!shortcutModeEnabled ? "active" : ""}
+              aria-pressed={!shortcutModeEnabled}
+              onClick={() => onShortcutModeChange(false)}
+            >
+              Off
+            </button>
+          </div>
+        </div>
+
+        <div className="shortcut-groups">
+          {groups.map((group) => (
+            <section className="shortcut-group" key={group.name}>
+              <h3>{group.name}</h3>
+              <dl>
+                {group.shortcuts.map((shortcut) => (
+                  <div key={shortcut.id}>
+                    <dt>
+                      <kbd>{shortcut.keys}</kbd>
+                      <span>{shortcut.label}</span>
+                    </dt>
+                    <dd>{shortcut.description}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+
+        <div className="shortcut-dialog-actions">
+          <button
+            className="utility-button compact-button"
+            type="button"
+            ref={closeButtonRef}
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -825,18 +1061,23 @@ type TestViewProps = {
   currentConfidence: Confidence;
   currentIndex: number;
   isAnswerLocked: boolean;
+  keyboardTipDismissed: boolean;
   question: Question;
   questions: Question[];
   questionCount: number;
   remainingSeconds: number;
   session: TestSession;
+  shortcutModeEnabled: boolean;
   unansweredWarning: number[] | null;
   onAnswer: (choiceId: ChoiceId) => void;
   onConfidence: (confidence: Confidence) => void;
+  onDismissKeyboardTip: () => void;
   onDismissSubmitWarning: () => void;
   onJump: (index: number) => void;
   onJumpNextUnanswered: () => void;
   onMove: (direction: -1 | 1) => void;
+  onOpenShortcuts: () => void;
+  questionHeadingRef: RefObject<HTMLHeadingElement | null>;
   onSubmit: () => void;
   onSubmitAnyway: () => void;
 };
@@ -847,25 +1088,72 @@ function TestView({
   currentConfidence,
   currentIndex,
   isAnswerLocked,
+  keyboardTipDismissed,
   question,
   questions,
   questionCount,
   remainingSeconds,
   session,
+  shortcutModeEnabled,
   unansweredWarning,
   onAnswer,
   onConfidence,
+  onDismissKeyboardTip,
   onDismissSubmitWarning,
   onJump,
   onJumpNextUnanswered,
   onMove,
+  onOpenShortcuts,
+  questionHeadingRef,
   onSubmit,
   onSubmitAnyway,
 }: TestViewProps) {
+  const answerButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const confidenceButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const isPracticeFeedbackVisible = session.feedbackMode === "practice" && Boolean(answer);
   const isCorrect = answer?.choiceId === question.correctChoiceId;
   const progressPercent = questionCount > 0 ? Math.round((answeredCount / questionCount) * 100) : 0;
   const hasUnanswered = answeredCount < questionCount;
+
+  const focusAdjacentButton = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+    refs: Array<HTMLButtonElement | null>,
+    direction: -1 | 1
+  ) => {
+    const availableButtons = refs.filter(
+      (button): button is HTMLButtonElement => button !== null && !button.disabled
+    );
+    if (availableButtons.length === 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const currentIndex = availableButtons.findIndex((button) => button === document.activeElement);
+    const nextIndex =
+      currentIndex === -1
+        ? direction === 1
+          ? 0
+          : availableButtons.length - 1
+        : Math.min(Math.max(currentIndex + direction, 0), availableButtons.length - 1);
+
+    availableButtons[nextIndex]?.focus();
+  };
+
+  const handleAnswerKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowDown") {
+      focusAdjacentButton(event, answerButtonRefs.current, 1);
+    } else if (event.key === "ArrowUp") {
+      focusAdjacentButton(event, answerButtonRefs.current, -1);
+    }
+  };
+
+  const handleConfidenceKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowRight") {
+      focusAdjacentButton(event, confidenceButtonRefs.current, 1);
+    } else if (event.key === "ArrowLeft") {
+      focusAdjacentButton(event, confidenceButtonRefs.current, -1);
+    }
+  };
 
   return (
     <div className="test-layout">
@@ -953,9 +1241,11 @@ function TestView({
           <span>{difficultyLabel(question.difficulty)}</span>
           <span aria-label="Estimated time">{question.estimatedSeconds}s target</span>
         </div>
-        <h1>{question.prompt}</h1>
+        <h1 ref={questionHeadingRef} tabIndex={-1}>
+          {question.prompt}
+        </h1>
 
-        <div className="choices" aria-label="Answer choices">
+        <div className="choices" aria-label="Answer choices" onKeyDown={handleAnswerKeyDown}>
           {question.choices.map((choice, index) => {
             const isSelected = answer?.choiceId === choice.id;
             const showCorrect = isPracticeFeedbackVisible && choice.id === question.correctChoiceId;
@@ -971,14 +1261,23 @@ function TestView({
                   .filter(Boolean)
                   .join(" ")}
                 key={choice.id}
+                ref={(button) => {
+                  answerButtonRefs.current[index] = button;
+                }}
                 type="button"
-                aria-label={`Choice ${choice.id} (press ${index + 1}): ${choice.text}`}
+                aria-label={
+                  shortcutModeEnabled
+                    ? `Choice ${choice.id}. Select answer ${choice.id}. Keyboard shortcut ${
+                        index + 1
+                      }. ${choice.text}`
+                    : `Choice ${choice.id}: ${choice.text}`
+                }
                 disabled={isAnswerLocked}
                 onClick={() => onAnswer(choice.id)}
               >
                 <span className="choice-letter">
                   {choice.id}
-                  <small aria-hidden="true">{index + 1}</small>
+                  {shortcutModeEnabled && <small aria-hidden="true">{index + 1}</small>}
                 </span>
                 <span>{choice.text}</span>
               </button>
@@ -1000,25 +1299,77 @@ function TestView({
           </div>
         )}
 
-        <p className="keyboard-hint">
-          Tip: press <kbd>1</kbd>–<kbd>5</kbd> to pick a choice.
-        </p>
+        {keyboardTipDismissed || !shortcutModeEnabled ? (
+          <button
+            className="shortcut-reminder"
+            type="button"
+            onClick={onOpenShortcuts}
+            aria-label="Show keyboard shortcuts."
+          >
+            Shortcuts
+          </button>
+        ) : (
+          <div className="keyboard-tip">
+            <p>
+              Use 1-5 to answer, Shift+1-3 for confidence, and arrows to move between
+              questions.
+            </p>
+            <button
+              type="button"
+              className="secondary-button compact-button"
+              onClick={onDismissKeyboardTip}
+            >
+              Got it
+            </button>
+            <button
+              type="button"
+              className="utility-button compact-button"
+              onClick={onOpenShortcuts}
+              aria-label="Show keyboard shortcuts."
+            >
+              Shortcuts
+            </button>
+          </div>
+        )}
 
         <div className="confidence-block">
           <span className="control-label">Confidence</span>
-          <div className="confidence-options" aria-label="Confidence rating">
-            {([1, 2, 3] as Confidence[]).map((confidence) => (
-              <button
-                className={currentConfidence === confidence ? "active" : ""}
-                key={confidence}
-                type="button"
-                aria-pressed={currentConfidence === confidence}
-                disabled={isAnswerLocked}
-                onClick={() => onConfidence(confidence)}
-              >
-                {confidenceLabel(confidence)}
-              </button>
-            ))}
+          <div
+            className="confidence-options"
+            aria-label="Confidence rating"
+            onKeyDown={handleConfidenceKeyDown}
+          >
+            {([1, 2, 3] as Confidence[]).map((confidence, index) => {
+              const shortcut = CONFIDENCE_SHORTCUTS.find(
+                (definition) => definition.confidence === confidence
+              );
+              const label = confidenceName(confidence);
+              return (
+                <button
+                  className={currentConfidence === confidence ? "active" : ""}
+                  key={confidence}
+                  ref={(button) => {
+                    confidenceButtonRefs.current[index] = button;
+                  }}
+                  type="button"
+                  aria-label={
+                    shortcutModeEnabled
+                      ? `Set confidence to ${label}. Keyboard shortcut ${shortcut?.ariaKeys}.`
+                      : `Set confidence to ${label}.`
+                  }
+                  aria-pressed={currentConfidence === confidence}
+                  disabled={isAnswerLocked}
+                  onClick={() => onConfidence(confidence)}
+                >
+                  <span>{confidenceLabel(confidence)}</span>
+                  {shortcutModeEnabled && shortcut && (
+                    <span className="shortcut-badge" aria-hidden="true">
+                      {shortcut.keys}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -1028,16 +1379,26 @@ function TestView({
             type="button"
             disabled={currentIndex === 0}
             onClick={() => onMove(-1)}
+            aria-label="Go to previous question. Keyboard shortcut Left Arrow."
+            title="Go to previous question. Keyboard shortcut Left Arrow."
           >
-            Previous
+            <span>Previous</span>
+            <span className="shortcut-badge shortcut-badge--navigation" aria-hidden="true">
+              ←
+            </span>
           </button>
           {hasUnanswered ? (
             <button
               className="secondary-button"
               type="button"
               onClick={onJumpNextUnanswered}
+              aria-label="Jump to next unanswered question. Keyboard shortcut Shift Right Arrow."
+              title="Jump to next unanswered question. Keyboard shortcut Shift Right Arrow."
             >
-              Next unanswered
+              <span>Next unanswered</span>
+              <span className="shortcut-badge shortcut-badge--navigation" aria-hidden="true">
+                Shift+→
+              </span>
             </button>
           ) : (
             <span className="answered-pill">All answered</span>
@@ -1047,8 +1408,13 @@ function TestView({
             type="button"
             disabled={currentIndex === questionCount - 1}
             onClick={() => onMove(1)}
+            aria-label="Go to next question. Keyboard shortcut Right Arrow."
+            title="Go to next question. Keyboard shortcut Right Arrow."
           >
-            Next
+            <span>Next</span>
+            <span className="shortcut-badge shortcut-badge--navigation" aria-hidden="true">
+              →
+            </span>
           </button>
         </div>
       </section>
