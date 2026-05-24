@@ -44,6 +44,15 @@ export type TestSession = {
   currentQuestionIndex: number;
 };
 
+export type ActiveSessionSnapshot = {
+  version: 1;
+  routePath: string;
+  savedAt: string;
+  remainingSeconds: number;
+  confidenceDrafts: Record<string, Confidence>;
+  session: TestSession;
+};
+
 export type TopicScore = {
   correct: number;
   total: number;
