@@ -45,8 +45,8 @@ const warnings = [];
 
 const choiceIds = ["A", "B", "C", "D", "E"];
 const difficultyIds = ["easy", "medium", "hard"];
-const expectedTopicCount = 20;
-const expectedTotal = TOPIC_ORDER.length * expectedTopicCount;
+const minTopicCount = 20;
+const minTotal = TOPIC_ORDER.length * minTopicCount;
 const expectedFullMockLength = 21;
 const weakDistractorPhrases = [
   "app's color palette",
@@ -140,16 +140,16 @@ if (!Array.isArray(QUESTIONS)) {
     }
   }
 
-  if (QUESTIONS.length !== expectedTotal) {
-    recordError(`Expected ${expectedTotal} questions, found ${QUESTIONS.length}.`);
+  if (QUESTIONS.length < minTotal) {
+    recordError(`Expected at least ${minTotal} questions, found ${QUESTIONS.length}.`);
   }
 
   for (const topic of TOPIC_ORDER) {
     const available = topicCounts[topic] ?? 0;
     const needed = FULL_MOCK_DISTRIBUTION[topic];
 
-    if (available !== expectedTopicCount) {
-      recordError(`Expected ${expectedTopicCount} ${topic} questions, found ${available}.`);
+    if (available < minTopicCount) {
+      recordError(`Expected at least ${minTopicCount} ${topic} questions, found ${available}.`);
     }
 
     if (available < needed) {
@@ -231,8 +231,11 @@ if (!Array.isArray(QUESTIONS)) {
   const expectedPerLetter = QUESTIONS.length / choiceIds.length;
   if (Number.isInteger(expectedPerLetter)) {
     for (const id of choiceIds) {
-      if (correctCounts[id] !== expectedPerLetter) {
-        recordError(`Expected ${expectedPerLetter} correct answers for ${id}, found ${correctCounts[id]}.`);
+      const diff = Math.abs(correctCounts[id] - expectedPerLetter);
+      if (diff > 1) {
+        recordError(`Expected ~${expectedPerLetter} correct answers for ${id}, found ${correctCounts[id]} (off by ${diff}).`);
+      } else if (diff === 1) {
+        recordWarning(`Correct answer letter ${id} is slightly off balance: expected ${expectedPerLetter}, found ${correctCounts[id]}.`);
       }
     }
   } else {

@@ -5,7 +5,12 @@
     "validate:questions": "node scripts/validate-question-bank.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "enrich:crawl": "node scripts/enrich-crawl.mjs",
+    "enrich:verify": "node scripts/enrich-verify.mjs",
+    "enrich:verify:auto": "node scripts/enrich-verify.mjs --auto",
+    "enrich:import": "node scripts/enrich-import.mjs",
+    "enrich:dry-run": "npm run enrich:crawl && npm run enrich:verify:auto && npm run validate:questions"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
