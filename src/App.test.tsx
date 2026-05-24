@@ -5,6 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { QUESTIONS } from "./questions";
+import { scoreQuestions } from "./scoring";
+import { saveAttempt } from "./storage";
+import type { AnswerRecord, Attempt } from "./types";
 
 function getVisibleQuestion() {
   const heading = screen.getByRole("heading", { level: 1 });
@@ -39,9 +42,140 @@ function expectChoiceNotSelected(choiceId: string) {
   expect(getChoiceButton(choiceId)).not.toHaveClass("selected");
 }
 
+function renderAt(path: string) {
+  window.history.pushState({}, "", path);
+  return render(<App />);
+}
+
+function createStoredAttempt(id = "attempt-stored"): Attempt {
+  const question = QUESTIONS[0];
+  const answers: Record<string, AnswerRecord> = {
+    [question.id]: { choiceId: question.correctChoiceId, confidence: 3 },
+  };
+
+  return {
+    id,
+    sessionId: "session-stored",
+    mode: "full_mock",
+    feedbackMode: "exam",
+    startedAt: "2026-05-24T01:00:00.000Z",
+    submittedAt: "2026-05-24T01:10:00.000Z",
+    durationSeconds: 600,
+    questionIds: [question.id],
+    answers,
+    score: scoreQuestions([question], answers),
+  };
+}
+
 afterEach(() => {
   window.localStorage.clear();
+  window.history.replaceState({}, "", "/");
   vi.restoreAllMocks();
+});
+
+describe("App routes", () => {
+  it("renders Frameworks directly from /frameworks", () => {
+    renderAt("/frameworks");
+
+    expect(screen.getByRole("heading", { level: 1, name: "Frameworks" })).toBeInTheDocument();
+  });
+
+  it("renders Full Mock Exam launch state without starting a timer", () => {
+    renderAt("/full-mock/exam");
+
+    expect(screen.getByRole("button", { name: "Full Mock" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Exam" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
+
+  it("renders Full Mock Practice launch state without starting a timer", () => {
+    renderAt("/full-mock/practice");
+
+    expect(screen.getByRole("button", { name: "Full Mock" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Practice" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
+
+  it("renders Topic Drill Practice launch state from a topic route", () => {
+    renderAt("/topic-drill/ab-testing/practice");
+
+    expect(screen.getByRole("button", { name: "Topic Drill" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Practice" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByLabelText("Topic")).toHaveValue("ab_testing");
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
+
+  it("updates the URL when launch controls and framework navigation change", async () => {
+    const user = userEvent.setup();
+    renderAt("/");
+
+    await user.click(screen.getByRole("button", { name: "Practice" }));
+    expect(window.location.pathname).toBe("/full-mock/practice");
+
+    await user.click(screen.getByRole("button", { name: "Topic Drill" }));
+    expect(window.location.pathname).toBe("/topic-drill/product-analytics/practice");
+
+    await user.selectOptions(screen.getByLabelText("Topic"), "data_interpretation");
+    expect(window.location.pathname).toBe("/topic-drill/data-interpretation/practice");
+
+    await user.click(screen.getByRole("button", { name: "Exam" }));
+    expect(window.location.pathname).toBe("/topic-drill/data-interpretation/exam");
+
+    await user.click(screen.getByRole("button", { name: "Frameworks" }));
+    expect(window.location.pathname).toBe("/frameworks");
+
+    await user.click(screen.getByRole("button", { name: "Back home" }));
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("navigates to a local result route after submit", async () => {
+    const user = userEvent.setup();
+    renderAt("/full-mock/exam");
+
+    await user.click(screen.getByRole("button", { name: /Start full mock/i }));
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Submit anyway" }));
+
+    expect(window.location.pathname).toMatch(/^\/results\/attempt-/);
+    expect(screen.getByRole("heading", { level: 1, name: "Results" })).toBeInTheDocument();
+  });
+
+  it("renders a stored local result from /results/:attemptId", () => {
+    const attempt = createStoredAttempt();
+    saveAttempt(attempt);
+
+    renderAt(`/results/${attempt.id}`);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Results" })).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+  });
+
+  it("shows a local-only message for a missing result route", () => {
+    renderAt("/results/not-a-real-attempt");
+
+    expect(
+      screen.getByText("That result is not available on this device. Results are stored locally.")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Results" })).not.toBeInTheDocument();
+  });
 });
 
 describe("App answer locking", () => {

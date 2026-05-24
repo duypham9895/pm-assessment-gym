@@ -560,6 +560,25 @@ select {
   font-weight: 800;
 }
 
+.route-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.route-notice strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-strong);
+}
+
+.route-notice p {
+  margin-bottom: 0;
+  color: var(--text-muted);
+}
+
 .attempt-list {
   display: grid;
   gap: 10px;
@@ -1515,6 +1534,11 @@ kbd {
   }
 
   .submit-warning {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .route-notice {
     align-items: stretch;
     flex-direction: column;
   }

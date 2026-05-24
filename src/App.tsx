@@ -9,8 +9,16 @@ import {
   selectFullMockQuestions,
   selectTopicQuestions,
 } from "./scoring";
+import {
+  type AppRoute,
+  type ParsedRoute,
+  parseRoute,
+  pathForRoute,
+  titleForRoute,
+} from "./routes";
 import { CONFIDENCE_SHORTCUTS, getGlobalShortcutAction, SHORTCUT_DEFINITIONS } from "./shortcuts";
 import {
+  findAttemptById,
   loadAttempts,
   loadKeyboardTipDismissed,
   loadShortcutModeEnabled,
@@ -32,9 +40,81 @@ import type {
 
 type View = "home" | "test" | "results" | "frameworks";
 type ThemeMode = "light" | "dark";
+type RouteNotice = NonNullable<ParsedRoute["message"]>;
 
 const QUESTION_BY_ID = new Map(QUESTIONS.map((question) => [question.id, question]));
 const THEME_KEY = "pm-assessment-theme-v1";
+
+function getLatestAttemptId() {
+  return loadAttempts()[0]?.id;
+}
+
+function parseCurrentRoute() {
+  if (typeof window === "undefined") return parseRoute("/");
+  return parseRoute(window.location.pathname, { latestAttemptId: getLatestAttemptId() });
+}
+
+function findRouteAttempt(route: AppRoute) {
+  if (route.kind !== "results") return null;
+  return findAttemptById(route.attemptId) ?? null;
+}
+
+function getSelectionFromRoute(route: AppRoute): {
+  mode: SessionMode;
+  feedbackMode: FeedbackMode;
+  topic: Topic;
+} {
+  if (route.kind === "assessment") {
+    return {
+      mode: route.mode,
+      feedbackMode: route.feedbackMode,
+      topic: route.topic ?? "product_analytics",
+    };
+  }
+
+  return {
+    mode: "full_mock",
+    feedbackMode: "exam",
+    topic: "product_analytics",
+  };
+}
+
+function getViewFromRoute(route: AppRoute, resultAttempt: Attempt | null): View {
+  if (route.kind === "frameworks") return "frameworks";
+  if (route.kind === "results" && resultAttempt) return "results";
+  return "home";
+}
+
+function routeForSelection(
+  mode: SessionMode,
+  feedbackMode: FeedbackMode,
+  topic: Topic
+): AppRoute {
+  if (mode === "full_mock") {
+    return { kind: "assessment", mode, feedbackMode };
+  }
+
+  return { kind: "assessment", mode, feedbackMode, topic };
+}
+
+function locationForPath(path: string, preserveSearch: boolean) {
+  if (typeof window === "undefined") return path;
+  return `${path}${preserveSearch ? window.location.search : ""}`;
+}
+
+function syncBrowserPath(
+  canonicalPath: string,
+  action: "pushState" | "replaceState",
+  preserveSearch = false
+) {
+  if (typeof window === "undefined") return;
+
+  const nextLocation = locationForPath(canonicalPath, preserveSearch);
+  const currentLocation = `${window.location.pathname}${window.location.search}`;
+  if (currentLocation === nextLocation) return;
+
+  window.history[action](window.history.state, "", nextLocation);
+}
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -127,14 +207,32 @@ function isPracticeAnswerLocked(session: TestSession, questionId: string) {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("home");
+  const initialRouteRef = useRef<ParsedRoute | null>(null);
+  if (!initialRouteRef.current) {
+    initialRouteRef.current = parseCurrentRoute();
+  }
+  const initialRoute = initialRouteRef.current;
+  const initialRouteAttemptRef = useRef<Attempt | null | undefined>(undefined);
+  if (initialRouteAttemptRef.current === undefined) {
+    initialRouteAttemptRef.current = findRouteAttempt(initialRoute.route);
+  }
+  const initialSelection = getSelectionFromRoute(initialRoute.route);
+
+  const [routeInfo, setRouteInfo] = useState<ParsedRoute>(initialRoute);
+  const [view, setView] = useState<View>(() =>
+    getViewFromRoute(initialRoute.route, initialRouteAttemptRef.current ?? null)
+  );
   const [attempts, setAttempts] = useState<Attempt[]>(() => loadAttempts());
-  const [selectedMode, setSelectedMode] = useState<SessionMode>("full_mock");
-  const [selectedFeedbackMode, setSelectedFeedbackMode] = useState<FeedbackMode>("exam");
-  const [selectedTopic, setSelectedTopic] = useState<Topic>("product_analytics");
+  const [selectedMode, setSelectedMode] = useState<SessionMode>(initialSelection.mode);
+  const [selectedFeedbackMode, setSelectedFeedbackMode] = useState<FeedbackMode>(
+    initialSelection.feedbackMode
+  );
+  const [selectedTopic, setSelectedTopic] = useState<Topic>(initialSelection.topic);
   const [session, setSession] = useState<TestSession | null>(null);
   const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([]);
-  const [latestAttempt, setLatestAttempt] = useState<Attempt | null>(null);
+  const [latestAttempt, setLatestAttempt] = useState<Attempt | null>(
+    initialRouteAttemptRef.current ?? null
+  );
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [confidenceDrafts, setConfidenceDrafts] = useState<Record<string, Confidence>>({});
   const [unansweredWarning, setUnansweredWarning] = useState<number[] | null>(null);
@@ -149,6 +247,104 @@ export default function App() {
   const questionHeadingRef = useRef<HTMLHeadingElement>(null);
   const shortcutHelpOpenerRef = useRef<HTMLElement | null>(null);
   const submittedSessionIds = useRef(new Set<string>());
+
+  const resetActiveSession = useCallback(() => {
+    setSession(null);
+    setSelectedQuestions([]);
+    setRemainingSeconds(0);
+    setConfidenceDrafts({});
+    setUnansweredWarning(null);
+  }, []);
+
+  const applyParsedRoute = useCallback(
+    (parsed: ParsedRoute, options?: { keepSession?: boolean }) => {
+      setRouteInfo(parsed);
+      setAttempts(loadAttempts());
+
+      if (!options?.keepSession) {
+        resetActiveSession();
+      }
+
+      const selection = getSelectionFromRoute(parsed.route);
+      setSelectedMode(selection.mode);
+      setSelectedFeedbackMode(selection.feedbackMode);
+      setSelectedTopic(selection.topic);
+
+      if (parsed.route.kind === "frameworks") {
+        setLatestAttempt(null);
+        setView("frameworks");
+        return;
+      }
+
+      if (parsed.route.kind === "results") {
+        const routeAttempt = findRouteAttempt(parsed.route);
+        setLatestAttempt(routeAttempt);
+        setView(routeAttempt ? "results" : "home");
+        return;
+      }
+
+      setLatestAttempt(null);
+      setView("home");
+    },
+    [resetActiveSession]
+  );
+
+  const navigateToRoute = useCallback(
+    (
+      route: AppRoute,
+      options?: {
+        replace?: boolean;
+        keepSession?: boolean;
+        preserveSearch?: boolean;
+        skipScroll?: boolean;
+      }
+    ) => {
+      const parsed = parseRoute(pathForRoute(route), { latestAttemptId: getLatestAttemptId() });
+      syncBrowserPath(
+        parsed.canonicalPath,
+        options?.replace ? "replaceState" : "pushState",
+        options?.preserveSearch ?? false
+      );
+      applyParsedRoute(parsed, { keepSession: options?.keepSession });
+
+      if (!options?.skipScroll) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    },
+    [applyParsedRoute]
+  );
+
+  const navigateToAssessment = useCallback(
+    (
+      mode: SessionMode,
+      feedbackMode: FeedbackMode,
+      topic: Topic,
+      options?: { keepSession?: boolean; preserveSearch?: boolean; skipScroll?: boolean }
+    ) => {
+      navigateToRoute(routeForSelection(mode, feedbackMode, topic), options);
+    },
+    [navigateToRoute]
+  );
+
+  useEffect(() => {
+    syncBrowserPath(initialRoute.canonicalPath, "replaceState", true);
+  }, [initialRoute.canonicalPath]);
+
+  useEffect(() => {
+    document.title = titleForRoute(routeInfo.route);
+  }, [routeInfo.route]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const parsed = parseCurrentRoute();
+      syncBrowserPath(parsed.canonicalPath, "replaceState", true);
+      applyParsedRoute(parsed);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [applyParsedRoute]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -228,6 +424,12 @@ export default function App() {
         return;
       }
 
+      navigateToAssessment(nextMode, nextFeedbackMode, nextTopic, {
+        keepSession: true,
+        preserveSearch: true,
+        skipScroll: true,
+      });
+
       const defaultTimeLimitSeconds =
         nextMode === "full_mock" ? 30 * 60 : Math.max(nextQuestions.length, 1) * 90;
       const timeLimitSeconds = getTimerOverrideSeconds() ?? defaultTimeLimitSeconds;
@@ -255,7 +457,7 @@ export default function App() {
       setView("test");
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [attempts, selectedFeedbackMode, selectedMode, selectedTopic]
+    [attempts, navigateToAssessment, selectedFeedbackMode, selectedMode, selectedTopic]
   );
 
   const submitSession = useCallback(
@@ -294,10 +496,10 @@ export default function App() {
       setAttempts(storedAttempts);
       setLatestAttempt(attempt);
       setRemainingSeconds(0);
-      setView("results");
+      navigateToRoute({ kind: "results", attemptId: attempt.id }, { skipScroll: true });
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [remainingSeconds, selectedQuestions, session]
+    [navigateToRoute, remainingSeconds, selectedQuestions, session]
   );
 
   const selectChoice = useCallback(
@@ -467,10 +669,18 @@ export default function App() {
     };
   }, [latestAttempt]);
 
+  const routeNotice: RouteNotice | undefined =
+    view === "home" && routeInfo.route.kind === "results" && !latestAttempt
+      ? "missing_result"
+      : routeInfo.message;
   const themeToggle = <ThemeToggle theme={theme} onCycle={cycleTheme} />;
 
   return (
     <main className="app-shell">
+      {view === "home" && routeNotice && (
+        <RouteNotice notice={routeNotice} onHome={() => navigateToRoute({ kind: "home" })} />
+      )}
+
       {view === "home" && (
         <HomeView
           attempts={attempts}
@@ -480,15 +690,21 @@ export default function App() {
           questionBankTotal={QUESTIONS.length}
           topicQuestionCounts={topicQuestionCounts}
           themeToggle={themeToggle}
-          onModeChange={setSelectedMode}
-          onFeedbackModeChange={setSelectedFeedbackMode}
-          onTopicChange={setSelectedTopic}
+          onModeChange={(mode) =>
+            navigateToAssessment(mode, selectedFeedbackMode, selectedTopic)
+          }
+          onFeedbackModeChange={(feedbackMode) =>
+            navigateToAssessment(selectedMode, feedbackMode, selectedTopic)
+          }
+          onTopicChange={(topic) =>
+            navigateToAssessment(selectedMode, selectedFeedbackMode, topic)
+          }
           onStart={() => startSession()}
           onBaselineMock={() => startSession({ mode: "full_mock", feedbackMode: "exam" })}
           onWeakTopicDrill={(topic) =>
             startSession({ mode: "topic_drill", feedbackMode: "practice", topic })
           }
-          onFrameworks={() => setView("frameworks")}
+          onFrameworks={() => navigateToRoute({ kind: "frameworks" })}
         />
       )}
 
@@ -535,24 +751,15 @@ export default function App() {
           onDrillWeakest={(topic) =>
             startSession({ mode: "topic_drill", feedbackMode: "practice", topic })
           }
-          onFrameworks={() => {
-            setView("frameworks");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-          onHome={() => {
-            setSession(null);
-            setView("home");
-          }}
+          onFrameworks={() => navigateToRoute({ kind: "frameworks" })}
+          onHome={() => navigateToRoute({ kind: "home" })}
         />
       )}
 
       {view === "frameworks" && (
         <FrameworksView
           themeToggle={themeToggle}
-          onBack={() => {
-            setView("home");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
+          onBack={() => navigateToRoute({ kind: "home" })}
         />
       )}
 
@@ -576,6 +783,25 @@ function getFocusableElements(container: HTMLElement) {
       !element.hasAttribute("disabled") &&
       element.getAttribute("aria-hidden") !== "true" &&
       element.getAttribute("hidden") === null
+  );
+}
+
+function RouteNotice({ notice, onHome }: { notice: RouteNotice; onHome: () => void }) {
+  const isMissingResult = notice === "missing_result";
+  const message = isMissingResult
+    ? "That result is not available on this device. Results are stored locally."
+    : "That link is not available. Choose a practice mode to continue.";
+
+  return (
+    <section className="panel route-notice" role="status" aria-live="polite">
+      <div>
+        <strong>{isMissingResult ? "Result unavailable" : "Link unavailable"}</strong>
+        <p>{message}</p>
+      </div>
+      <button className="secondary-button compact-button" type="button" onClick={onHome}>
+        {isMissingResult ? "Back home" : "Choose practice mode"}
+      </button>
+    </section>
   );
 }
 

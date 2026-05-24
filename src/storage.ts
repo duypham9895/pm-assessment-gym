@@ -26,6 +26,10 @@ export function saveAttempt(attempt: Attempt): Attempt[] {
   return attempts;
 }
 
+export function findAttemptById(attemptId: string): Attempt | undefined {
+  return loadAttempts().find((attempt) => attempt.id === attemptId);
+}
+
 export function loadKeyboardTipDismissed(): boolean {
   if (typeof localStorage === "undefined") return false;
   return localStorage.getItem(KEYBOARD_TIP_KEY) === "true";
