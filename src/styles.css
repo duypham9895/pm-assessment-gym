@@ -1044,7 +1044,7 @@ select {
   background: var(--surface-elev);
 }
 
-.shortcut-overlay {
+.modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -1054,7 +1054,7 @@ select {
   background: rgba(7, 16, 20, 0.52);
 }
 
-.shortcut-dialog {
+.modal-dialog {
   display: grid;
   gap: 16px;
   width: min(720px, 100%);
@@ -1065,6 +1065,10 @@ select {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow-bar);
+}
+
+.shortcut-dialog {
+  width: min(720px, 100%);
 }
 
 .shortcut-dialog-header {

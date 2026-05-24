@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { QUESTIONS } from "./questions";
+import { FULL_MOCK_QUESTION_COUNT, QUESTIONS, TOPIC_ORDER } from "./questions";
+import { topicToSlug } from "./routes";
 import { scoreQuestions } from "./scoring";
-import { saveAttempt } from "./storage";
-import type { AnswerRecord, Attempt } from "./types";
+import { saveActiveSessionSnapshot, saveAttempt } from "./storage";
+import type { ActiveSessionSnapshot, AnswerRecord, Attempt, FeedbackMode, Topic } from "./types";
 
 function getVisibleQuestion() {
   const heading = screen.getByRole("heading", { level: 1 });
@@ -65,6 +66,63 @@ function createStoredAttempt(id = "attempt-stored"): Attempt {
     answers,
     score: scoreQuestions([question], answers),
   };
+}
+
+function questionsForTopic(topic: Topic) {
+  return QUESTIONS.filter((question) => question.topic === topic).slice(0, 10);
+}
+
+function createActiveSessionSnapshot(
+  overrides: Partial<ActiveSessionSnapshot> = {}
+): ActiveSessionSnapshot {
+  const questions = QUESTIONS.slice(0, FULL_MOCK_QUESTION_COUNT);
+  const session = {
+    id: "session-active",
+    mode: "full_mock" as const,
+    feedbackMode: "practice" as const,
+    startedAt: "2026-05-24T01:00:00.000Z",
+    timeLimitSeconds: 1800,
+    questionIds: questions.map((question) => question.id),
+    answers: {
+      [questions[0].id]: { choiceId: questions[0].correctChoiceId, confidence: 3 },
+    },
+    currentQuestionIndex: 1,
+  };
+
+  return {
+    version: 1,
+    routePath: "/full-mock/practice",
+    savedAt: new Date().toISOString(),
+    remainingSeconds: 1700,
+    confidenceDrafts: {
+      [questions[1].id]: 1,
+    },
+    session,
+    ...overrides,
+  };
+}
+
+function createTopicDrillSnapshot(topic: Topic, feedbackMode: FeedbackMode) {
+  const questions = questionsForTopic(topic);
+
+  return createActiveSessionSnapshot({
+    routePath: `/topic-drill/${topicToSlug(topic)}/${feedbackMode}`,
+    remainingSeconds: 850,
+    confidenceDrafts: {},
+    session: {
+      id: `session-${topic}-${feedbackMode}`,
+      mode: "topic_drill",
+      feedbackMode,
+      topicFilter: topic,
+      startedAt: "2026-05-24T01:00:00.000Z",
+      timeLimitSeconds: 900,
+      questionIds: questions.map((question) => question.id),
+      answers: {
+        [questions[0].id]: { choiceId: questions[0].correctChoiceId, confidence: 2 },
+      },
+      currentQuestionIndex: 1,
+    },
+  });
 }
 
 afterEach(() => {
@@ -175,6 +233,176 @@ describe("App routes", () => {
       screen.getByText("That result is not available on this device. Results are stored locally.")
     ).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1, name: "Results" })).not.toBeInTheDocument();
+  });
+
+  it("restores a matching Full Mock Practice session from /full-mock/practice after refresh", () => {
+    const snapshot = createActiveSessionSnapshot();
+    saveActiveSessionSnapshot(snapshot);
+
+    renderAt("/full-mock/practice");
+
+    const restoredQuestion = QUESTIONS.find(
+      (question) => question.id === snapshot.session.questionIds[1]
+    )!;
+    expect(
+      screen.getByRole("heading", { level: 1, name: restoredQuestion.prompt })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("timer")).toHaveTextContent("28:");
+    expect(screen.getByRole("tab", { name: /Question 2, current/i })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["exam", "/full-mock/exam"],
+    ["practice", "/full-mock/practice"],
+  ] as const)("restores a matching Full Mock %s session", (feedbackMode, routePath) => {
+    saveActiveSessionSnapshot(
+      createActiveSessionSnapshot({
+        routePath,
+        session: {
+          ...createActiveSessionSnapshot().session,
+          feedbackMode,
+        },
+      })
+    );
+
+    renderAt(routePath);
+
+    expect(screen.getByRole("timer")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Question 2, current/i })).toBeInTheDocument();
+  });
+
+  it.each(
+    TOPIC_ORDER.flatMap((topic) =>
+      (["exam", "practice"] as const).map((feedbackMode) => [topic, feedbackMode] as const)
+    )
+  )("restores a matching %s topic drill %s session", (topic, feedbackMode) => {
+    const questions = questionsForTopic(topic);
+    const routePath = `/topic-drill/${topicToSlug(topic)}/${feedbackMode}`;
+    saveActiveSessionSnapshot(createTopicDrillSnapshot(topic, feedbackMode));
+
+    renderAt(routePath);
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: questions[1].prompt })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("timer")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Question 2, current/i })).toBeInTheDocument();
+  });
+
+  it("uses the launch state when the active session does not match the assessment route", () => {
+    saveActiveSessionSnapshot(createActiveSessionSnapshot());
+
+    renderAt("/full-mock/exam");
+
+    expect(screen.getByRole("button", { name: "Full Mock" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Exam" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
+
+  it("does not let an active session hijack Home, Frameworks, or Results routes", () => {
+    const attempt = createStoredAttempt();
+    saveAttempt(attempt);
+    saveActiveSessionSnapshot(createActiveSessionSnapshot());
+
+    let rendered = renderAt("/");
+    expect(screen.getByRole("heading", { level: 1, name: "PM Assessment Gym" })).toBeInTheDocument();
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+
+    rendered.unmount();
+    rendered = renderAt("/frameworks");
+    expect(screen.getByRole("heading", { level: 1, name: "Frameworks" })).toBeInTheDocument();
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+
+    rendered.unmount();
+    rendered = renderAt("/results");
+    expect(window.location.pathname).toBe(`/results/${attempt.id}`);
+    expect(screen.getByRole("heading", { level: 1, name: "Results" })).toBeInTheDocument();
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+
+    rendered.unmount();
+    renderAt(`/results/${attempt.id}`);
+    expect(screen.getByRole("heading", { level: 1, name: "Results" })).toBeInTheDocument();
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
+
+  it("does not let an active session hijack unknown paths or unknown topics", () => {
+    saveActiveSessionSnapshot(createActiveSessionSnapshot());
+
+    const { unmount } = renderAt("/not-a-real-route");
+    expect(window.location.pathname).toBe("/");
+    expect(screen.getByRole("heading", { level: 1, name: "PM Assessment Gym" })).toBeInTheDocument();
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+
+    unmount();
+    renderAt("/topic-drill/not-a-topic/practice");
+    expect(window.location.pathname).toBe("/");
+    expect(screen.getByRole("heading", { level: 1, name: "PM Assessment Gym" })).toBeInTheDocument();
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
+
+  it("restores a matching Full Mock Exam session from the /full-mock shorthand route", () => {
+    saveActiveSessionSnapshot(
+      createActiveSessionSnapshot({
+        routePath: "/full-mock/exam",
+        session: {
+          ...createActiveSessionSnapshot().session,
+          feedbackMode: "exam",
+        },
+      })
+    );
+
+    renderAt("/full-mock");
+
+    expect(window.location.pathname).toBe("/full-mock/exam");
+    expect(screen.getByRole("timer")).toBeInTheDocument();
+  });
+
+  it("restores a matching Topic Drill Practice session from the topic shorthand route", () => {
+    const questions = questionsForTopic("ab_testing");
+    saveActiveSessionSnapshot(createTopicDrillSnapshot("ab_testing", "practice"));
+
+    renderAt("/topic-drill/ab-testing");
+
+    expect(window.location.pathname).toBe("/topic-drill/ab-testing/practice");
+    expect(
+      screen.getByRole("heading", { level: 1, name: questions[1].prompt })
+    ).toBeInTheDocument();
+  });
+
+  it("clears the active session snapshot after submit", async () => {
+    const user = userEvent.setup();
+    renderAt("/full-mock/practice");
+
+    await user.click(screen.getByRole("button", { name: /Start full mock/i }));
+    expect(window.localStorage.getItem("pm-assessment-active-session-v1")).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Submit anyway" }));
+
+    expect(window.localStorage.getItem("pm-assessment-active-session-v1")).toBeNull();
+    expect(window.location.pathname).toMatch(/^\/results\/attempt-/);
+  });
+
+  it("clears the active session snapshot after timer auto-submit", async () => {
+    const user = userEvent.setup();
+    renderAt("/full-mock/practice?timerSeconds=1");
+
+    await user.click(screen.getByRole("button", { name: /Start full mock/i }));
+    expect(window.localStorage.getItem("pm-assessment-active-session-v1")).not.toBeNull();
+
+    await waitFor(
+      () => {
+        expect(window.location.pathname).toMatch(/^\/results\/attempt-/);
+      },
+      { timeout: 2500 }
+    );
+    expect(window.localStorage.getItem("pm-assessment-active-session-v1")).toBeNull();
   });
 });
 
@@ -599,6 +827,8 @@ describe("App keyboard shortcuts", () => {
     expect(screen.getByRole("button", { name: /Show keyboard shortcuts/i })).toBeInTheDocument();
 
     unmount();
+    window.localStorage.removeItem("pm-assessment-active-session-v1");
+    window.history.replaceState({}, "", "/");
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: /Start full mock/i }));
@@ -630,6 +860,46 @@ describe("App keyboard shortcuts", () => {
       screen.queryByRole("dialog", { name: "Keyboard shortcuts" })
     ).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
+  });
+
+  it("closes app modals when clicking the backdrop and restores focus", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /Start full mock/i }));
+    const opener = screen.getByRole("button", { name: /Show keyboard shortcuts/i });
+    await user.click(opener);
+
+    const overlay = document.querySelector(".modal-overlay");
+    expect(overlay).toBeInstanceOf(HTMLElement);
+
+    await user.click(overlay as HTMLElement);
+
+    expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
+  it("keeps app modals open when clicking inside the dialog", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /Start full mock/i }));
+    await user.click(screen.getByRole("button", { name: /Show keyboard shortcuts/i }));
+
+    await user.click(screen.getByRole("dialog", { name: "Keyboard shortcuts" }));
+
+    expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeInTheDocument();
+  });
+
+  it("renders dialogs inside the shared modal overlay surface", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /Start full mock/i }));
+    await user.click(screen.getByRole("button", { name: /Show keyboard shortcuts/i }));
+
+    const dialog = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
+    expect(dialog.closest(".modal-overlay")).toBeInstanceOf(HTMLElement);
   });
 
   it("opens shortcut help from ? when shortcut mode is enabled", async () => {

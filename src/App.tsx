@@ -1,4 +1,9 @@
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+  RefObject,
+} from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FRAMEWORKS_MARKDOWN } from "./frameworks";
 import { FULL_MOCK_QUESTION_COUNT, QUESTIONS, TOPIC_LABELS, TOPIC_ORDER } from "./questions";
@@ -18,10 +23,13 @@ import {
 } from "./routes";
 import { CONFIDENCE_SHORTCUTS, getGlobalShortcutAction, SHORTCUT_DEFINITIONS } from "./shortcuts";
 import {
+  clearActiveSessionSnapshot,
   findAttemptById,
+  loadActiveSessionSnapshot,
   loadAttempts,
   loadKeyboardTipDismissed,
   loadShortcutModeEnabled,
+  saveActiveSessionSnapshot,
   saveAttempt,
   saveKeyboardTipDismissed,
   saveShortcutModeEnabled,
@@ -206,6 +214,71 @@ function isPracticeAnswerLocked(session: TestSession, questionId: string) {
   return session.feedbackMode === "practice" && Boolean(session.answers[questionId]);
 }
 
+type RestoredActiveSession = {
+  session: TestSession;
+  questions: Question[];
+  remainingSeconds: number;
+  confidenceDrafts: Record<string, Confidence>;
+};
+
+function routeMatchesSession(route: AppRoute, session: TestSession) {
+  if (route.kind !== "assessment") return false;
+  if (route.mode !== session.mode) return false;
+  if (route.feedbackMode !== session.feedbackMode) return false;
+
+  if (route.mode === "topic_drill") {
+    return route.topic === session.topicFilter;
+  }
+
+  return true;
+}
+
+function getElapsedSecondsSinceSaved(savedAt: string) {
+  const savedTime = new Date(savedAt).getTime();
+  if (!Number.isFinite(savedTime)) return 0;
+  return Math.max(0, Math.floor((Date.now() - savedTime) / 1000));
+}
+
+function getQuestionsForSession(session: TestSession) {
+  const questions = session.questionIds
+    .map((questionId) => QUESTION_BY_ID.get(questionId))
+    .filter((question): question is Question => Boolean(question));
+
+  return questions.length === session.questionIds.length ? questions : null;
+}
+
+function getRestoredActiveSession(route: AppRoute): RestoredActiveSession | null {
+  if (route.kind !== "assessment") return null;
+
+  const snapshot = loadActiveSessionSnapshot();
+  if (!snapshot) return null;
+  if (!routeMatchesSession(route, snapshot.session)) return null;
+
+  const questions = getQuestionsForSession(snapshot.session);
+  if (!questions) {
+    clearActiveSessionSnapshot();
+    return null;
+  }
+
+  return {
+    session: snapshot.session,
+    questions,
+    remainingSeconds: Math.max(
+      0,
+      Math.floor(snapshot.remainingSeconds) - getElapsedSecondsSinceSaved(snapshot.savedAt)
+    ),
+    confidenceDrafts: snapshot.confidenceDrafts,
+  };
+}
+
+function routeForSession(session: TestSession): AppRoute {
+  return routeForSelection(
+    session.mode,
+    session.feedbackMode,
+    session.topicFilter ?? "product_analytics"
+  );
+}
+
 export default function App() {
   const initialRouteRef = useRef<ParsedRoute | null>(null);
   if (!initialRouteRef.current) {
@@ -216,11 +289,20 @@ export default function App() {
   if (initialRouteAttemptRef.current === undefined) {
     initialRouteAttemptRef.current = findRouteAttempt(initialRoute.route);
   }
+  const initialRestoredSessionRef = useRef<RestoredActiveSession | null | undefined>(
+    undefined
+  );
+  if (initialRestoredSessionRef.current === undefined) {
+    initialRestoredSessionRef.current = getRestoredActiveSession(initialRoute.route);
+  }
+  const initialRestoredSession = initialRestoredSessionRef.current;
   const initialSelection = getSelectionFromRoute(initialRoute.route);
 
   const [routeInfo, setRouteInfo] = useState<ParsedRoute>(initialRoute);
   const [view, setView] = useState<View>(() =>
-    getViewFromRoute(initialRoute.route, initialRouteAttemptRef.current ?? null)
+    initialRestoredSession
+      ? "test"
+      : getViewFromRoute(initialRoute.route, initialRouteAttemptRef.current ?? null)
   );
   const [attempts, setAttempts] = useState<Attempt[]>(() => loadAttempts());
   const [selectedMode, setSelectedMode] = useState<SessionMode>(initialSelection.mode);
@@ -228,13 +310,21 @@ export default function App() {
     initialSelection.feedbackMode
   );
   const [selectedTopic, setSelectedTopic] = useState<Topic>(initialSelection.topic);
-  const [session, setSession] = useState<TestSession | null>(null);
-  const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([]);
+  const [session, setSession] = useState<TestSession | null>(
+    initialRestoredSession?.session ?? null
+  );
+  const [selectedQuestions, setSelectedQuestions] = useState<Question[]>(
+    initialRestoredSession?.questions ?? []
+  );
   const [latestAttempt, setLatestAttempt] = useState<Attempt | null>(
     initialRouteAttemptRef.current ?? null
   );
-  const [remainingSeconds, setRemainingSeconds] = useState(0);
-  const [confidenceDrafts, setConfidenceDrafts] = useState<Record<string, Confidence>>({});
+  const [remainingSeconds, setRemainingSeconds] = useState(
+    initialRestoredSession?.remainingSeconds ?? 0
+  );
+  const [confidenceDrafts, setConfidenceDrafts] = useState<Record<string, Confidence>>(
+    initialRestoredSession?.confidenceDrafts ?? {}
+  );
   const [unansweredWarning, setUnansweredWarning] = useState<number[] | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => loadTheme());
   const [keyboardTipDismissed, setKeyboardTipDismissed] = useState(() =>
@@ -269,6 +359,20 @@ export default function App() {
       setSelectedMode(selection.mode);
       setSelectedFeedbackMode(selection.feedbackMode);
       setSelectedTopic(selection.topic);
+
+      if (parsed.route.kind === "assessment" && !options?.keepSession) {
+        const restoredSession = getRestoredActiveSession(parsed.route);
+        if (restoredSession) {
+          setSession(restoredSession.session);
+          setSelectedQuestions(restoredSession.questions);
+          setRemainingSeconds(restoredSession.remainingSeconds);
+          setConfidenceDrafts(restoredSession.confidenceDrafts);
+          setUnansweredWarning(null);
+          setLatestAttempt(null);
+          setView("test");
+          return;
+        }
+      }
 
       if (parsed.route.kind === "frameworks") {
         setLatestAttempt(null);
@@ -476,6 +580,7 @@ export default function App() {
 
       submittedSessionIds.current.add(session.id);
       setUnansweredWarning(null);
+      clearActiveSessionSnapshot();
 
       const submittedAt = new Date().toISOString();
       const attempt: Attempt = {
@@ -595,6 +700,19 @@ export default function App() {
 
     return () => window.clearInterval(interval);
   }, [session?.id, view]);
+
+  useEffect(() => {
+    if (view !== "test" || !session) return;
+
+    saveActiveSessionSnapshot({
+      version: 1,
+      routePath: pathForRoute(routeForSession(session)),
+      savedAt: new Date().toISOString(),
+      remainingSeconds,
+      confidenceDrafts,
+      session,
+    });
+  }, [confidenceDrafts, remainingSeconds, session, view]);
 
   useEffect(() => {
     if (view === "test" && session && remainingSeconds === 0) {
@@ -786,6 +904,53 @@ function getFocusableElements(container: HTMLElement) {
   );
 }
 
+function ModalOverlay({
+  children,
+  className = "",
+  dialogRef,
+  labelledBy,
+  onClose,
+  onKeyDown,
+}: {
+  children: ReactNode;
+  className?: string;
+  dialogRef: RefObject<HTMLDivElement | null>;
+  labelledBy: string;
+  onClose: () => void;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
+}) {
+  useEffect(() => {
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+
+    document.addEventListener("keydown", handleDocumentKeyDown);
+    return () => document.removeEventListener("keydown", handleDocumentKeyDown);
+  }, [onClose]);
+
+  const handleOverlayClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={handleOverlayClick} onKeyDown={onKeyDown}>
+      <div
+        className={`modal-dialog ${className}`.trim()}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function RouteNotice({ notice, onHome }: { notice: RouteNotice; onHome: () => void }) {
   const isMissingResult = notice === "missing_result";
   const message = isMissingResult
@@ -836,12 +1001,6 @@ function ShortcutsHelpOverlay({
   }, []);
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-
     if (event.key !== "Tab") return;
 
     const dialog = dialogRef.current;
@@ -866,74 +1025,72 @@ function ShortcutsHelpOverlay({
   };
 
   return (
-    <div className="shortcut-overlay" onKeyDown={handleKeyDown}>
-      <div
-        className="shortcut-dialog"
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="shortcut-dialog-title"
-      >
-        <div className="shortcut-dialog-header">
-          <div>
-            <h2 id="shortcut-dialog-title">Keyboard shortcuts</h2>
-            <p>Control printable shortcuts without turning off arrow-key navigation.</p>
-          </div>
+    <ModalOverlay
+      className="shortcut-dialog"
+      dialogRef={dialogRef}
+      labelledBy="shortcut-dialog-title"
+      onClose={onClose}
+      onKeyDown={handleKeyDown}
+    >
+      <div className="shortcut-dialog-header">
+        <div>
+          <h2 id="shortcut-dialog-title">Keyboard shortcuts</h2>
+          <p>Control printable shortcuts without turning off arrow-key navigation.</p>
         </div>
+      </div>
 
-        <div className="shortcut-setting">
-          <span className="control-label">Keyboard shortcuts</span>
-          <div className="segmented-control" aria-label="Keyboard shortcuts">
-            <button
-              type="button"
-              className={shortcutModeEnabled ? "active" : ""}
-              aria-pressed={shortcutModeEnabled}
-              onClick={() => onShortcutModeChange(true)}
-            >
-              On
-            </button>
-            <button
-              type="button"
-              className={!shortcutModeEnabled ? "active" : ""}
-              aria-pressed={!shortcutModeEnabled}
-              onClick={() => onShortcutModeChange(false)}
-            >
-              Off
-            </button>
-          </div>
-        </div>
-
-        <div className="shortcut-groups">
-          {groups.map((group) => (
-            <section className="shortcut-group" key={group.name}>
-              <h3>{group.name}</h3>
-              <dl>
-                {group.shortcuts.map((shortcut) => (
-                  <div key={shortcut.id}>
-                    <dt>
-                      <kbd>{shortcut.keys}</kbd>
-                      <span>{shortcut.label}</span>
-                    </dt>
-                    <dd>{shortcut.description}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-          ))}
-        </div>
-
-        <div className="shortcut-dialog-actions">
+      <div className="shortcut-setting">
+        <span className="control-label">Keyboard shortcuts</span>
+        <div className="segmented-control" aria-label="Keyboard shortcuts">
           <button
-            className="utility-button compact-button"
             type="button"
-            ref={closeButtonRef}
-            onClick={onClose}
+            className={shortcutModeEnabled ? "active" : ""}
+            aria-pressed={shortcutModeEnabled}
+            onClick={() => onShortcutModeChange(true)}
           >
-            Close
+            On
+          </button>
+          <button
+            type="button"
+            className={!shortcutModeEnabled ? "active" : ""}
+            aria-pressed={!shortcutModeEnabled}
+            onClick={() => onShortcutModeChange(false)}
+          >
+            Off
           </button>
         </div>
       </div>
-    </div>
+
+      <div className="shortcut-groups">
+        {groups.map((group) => (
+          <section className="shortcut-group" key={group.name}>
+            <h3>{group.name}</h3>
+            <dl>
+              {group.shortcuts.map((shortcut) => (
+                <div key={shortcut.id}>
+                  <dt>
+                    <kbd>{shortcut.keys}</kbd>
+                    <span>{shortcut.label}</span>
+                  </dt>
+                  <dd>{shortcut.description}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ))}
+      </div>
+
+      <div className="shortcut-dialog-actions">
+        <button
+          className="utility-button compact-button"
+          type="button"
+          ref={closeButtonRef}
+          onClick={onClose}
+        >
+          Close
+        </button>
+      </div>
+    </ModalOverlay>
   );
 }
 
