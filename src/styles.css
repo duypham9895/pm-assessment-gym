@@ -231,6 +231,14 @@ p {
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+.confidence-options button {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .segmented-control button.active,
 .confidence-options button.active {
   border-color: var(--accent);
@@ -921,6 +929,13 @@ select {
   margin-top: 22px;
 }
 
+.question-actions .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .answered-pill,
 .unanswered-pill {
   justify-self: center;
@@ -940,22 +955,191 @@ select {
   background: var(--pill-yellow-bg);
 }
 
-.keyboard-hint {
-  margin-top: 10px;
+.keyboard-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: 0.88rem;
 }
 
-.keyboard-hint kbd {
-  display: inline-block;
-  min-width: 18px;
-  padding: 1px 5px;
+.keyboard-tip p {
+  margin: 0;
+}
+
+.compact-button {
+  min-height: 34px;
+  padding: 7px 12px;
+  white-space: nowrap;
+}
+
+.shortcut-reminder {
+  width: fit-content;
+  margin-top: 12px;
+  padding: 7px 12px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 999px;
   background: var(--surface-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.shortcut-reminder:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.shortcut-badge {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-strong);
+  background: var(--surface-muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.confidence-options button.active .shortcut-badge {
+  border-color: color-mix(in srgb, var(--on-accent) 42%, transparent);
+  color: var(--on-accent);
+  background: color-mix(in srgb, var(--on-accent) 16%, transparent);
+}
+
+.shortcut-badge--navigation {
+  color: var(--text-muted);
+  background: var(--surface-elev);
+}
+
+.shortcut-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(7, 16, 20, 0.52);
+}
+
+.shortcut-dialog {
+  display: grid;
+  gap: 16px;
+  width: min(720px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-bar);
+}
+
+.shortcut-dialog-header {
+  display: grid;
+  gap: 6px;
+}
+
+.shortcut-dialog-header h2 {
+  margin-bottom: 0;
+  color: var(--text-strong);
+  font-size: 1.35rem;
+}
+
+.shortcut-dialog-header p {
+  margin-bottom: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.shortcut-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-elev);
+}
+
+.shortcut-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.shortcut-group {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.shortcut-group h3 {
+  margin: 0 0 10px;
+  color: var(--text-strong);
+  font-size: 0.95rem;
+}
+
+.shortcut-group dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.shortcut-group dl > div {
+  display: grid;
+  gap: 4px;
+}
+
+.shortcut-group dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.shortcut-group dd {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+kbd {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-strong);
+  background: var(--surface-muted);
+  font: inherit;
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.shortcut-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .result-summary {
@@ -1294,6 +1478,14 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .shortcut-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .shortcut-setting {
+    grid-template-columns: 1fr;
+  }
+
   .next-action {
     padding-top: 16px;
     padding-left: 0;
@@ -1366,8 +1558,25 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .confidence-options button {
+    justify-content: space-between;
+  }
+
   .question-actions {
     grid-template-columns: 1fr;
+  }
+
+  .shortcut-badge--navigation {
+    display: none;
+  }
+
+  .keyboard-tip {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .keyboard-tip p {
+    flex-basis: 100%;
   }
 
   .answered-pill,
