@@ -16,7 +16,7 @@ Auto-deploys to Vercel on every push to `main`. Pull requests get their own prev
 - Weakest-topic detection and one-click drill
 - localStorage history of your last 5 attempts
 - Light and dark theme with manual toggle
-- Keyboard shortcuts: press `1`–`5` to pick a choice
+- Keyboard-first flow: `1`–`5` answers, `Shift+1`–`Shift+3` confidence, arrow navigation, next-unanswered jump, and a shortcuts help overlay
 - Mobile-friendly, accessible focus rings, `prefers-reduced-motion` respected
 
 ## Run locally
@@ -56,6 +56,10 @@ npm run build
 
 Outputs a static bundle to `dist/`. Deploys cleanly to Vercel, Netlify, or any static host.
 
+## Maintenance Rule
+
+Keep this README up to date with every meaningful change to features, commands, project structure, deployment behavior, validation steps, or user-facing behavior.
+
 ## Content validation
 
 ```bash
@@ -70,7 +74,9 @@ Checks topic coverage, question structure, and balanced correct-answer letters.
 - `src/frameworks.ts` — quick-reference framework notes shown in the Frameworks view.
 - `src/scoring.ts` — selection, scoring, weakest-topic detection, and review building.
 - `src/storage.ts` — localStorage persistence of the last 5 attempts.
+- `src/shortcuts.ts` — keyboard shortcut definitions, key matching, and editable/modal guards.
 - `src/App.tsx` — UI: home, test, results, frameworks views.
+- `AGENTS.md` — Codex project memory and repository working instructions.
 
 ## URL params (dev only)
 
