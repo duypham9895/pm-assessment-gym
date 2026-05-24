@@ -2342,6 +2342,24 @@ const EXPANDED_QUESTIONS: Question[] = [
     conceptTags: ["network-effects", "spillover"],
     estimatedSeconds: 90,
   }),
+
+  makeQuestion({
+    id: "pa-021",
+    topic: "product_analytics",
+    difficulty: "medium",
+    prompt: "A B2B product team adds an onboarding checklist. Checklist completion doubles from 28% to 56%, but paid team creation stays flat. What should the PM examine before expanding the checklist work?",
+    choices: {
+      A: "Whether completed checklist steps lead users to the collaborative actions that usually precede paid team creation.",
+      B: "Whether the launch announcement drove enough one-time page views to call the checklist successful.",
+      C: "Whether sales can manually convert every user who starts but does not finish the checklist.",
+      D: "Whether paid team creation should be removed from the metric tree because it did not improve.",
+      E: "Whether the checklist should be expanded to every page before understanding downstream behavior.",
+    },
+    correctChoiceId: "A",
+    explanation: "Checklist completion is only valuable if it moves users toward the behaviors that predict paid team creation. The PM should inspect whether completed steps connect to collaborative activation, rather than celebrating a shallow completion metric.",
+    conceptTags: ["onboarding-quality","activation-metrics"],
+    estimatedSeconds: 90,
+  }),
 ];
 
 export const QUESTIONS: Question[] = [...SEED_QUESTIONS, ...EXPANDED_QUESTIONS];
