@@ -93,7 +93,9 @@ body {
 }
 
 button,
-select {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -256,6 +258,33 @@ select {
   color: var(--text);
   background: var(--surface);
   font-weight: 700;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+input {
+  min-height: 48px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+textarea {
+  min-height: 96px;
+  padding: 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
 }
 
 .primary-button,
@@ -1071,21 +1100,74 @@ select {
   width: min(720px, 100%);
 }
 
+.share-dialog {
+  width: min(900px, 100%);
+}
+
 .shortcut-dialog-header {
   display: grid;
   gap: 6px;
 }
 
-.shortcut-dialog-header h2 {
+.shortcut-dialog-header h2,
+.share-dialog-header h2 {
   margin-bottom: 0;
   color: var(--text-strong);
   font-size: 1.35rem;
 }
 
-.shortcut-dialog-header p {
+.shortcut-dialog-header p,
+.share-dialog-header p {
   margin-bottom: 0;
   color: var(--text-muted);
   line-height: 1.45;
+}
+
+.share-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.share-detail-setting {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.3fr) minmax(210px, 0.5fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-elev);
+}
+
+.share-detail-setting p {
+  margin-bottom: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.share-preview {
+  min-height: 260px;
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.82rem;
+  white-space: pre;
+}
+
+.share-copy-status {
+  min-height: 20px;
+  margin-bottom: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.share-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .shortcut-setting {
@@ -1377,6 +1459,95 @@ kbd {
   gap: 10px;
 }
 
+.timing-panel {
+  background: var(--surface-elev);
+}
+
+.timing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.timing-grid div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.timing-grid strong {
+  color: var(--text-strong);
+}
+
+.timing-grid p,
+.timing-caveat {
+  margin-bottom: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.timing-caveat {
+  margin-top: 12px;
+}
+
+.shared-review-input {
+  display: grid;
+  gap: 14px;
+}
+
+.import-error {
+  margin-bottom: 0;
+  padding: 12px;
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  font-weight: 800;
+}
+
+.shared-context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.shared-context-grid div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-elev);
+}
+
+.shared-context-grid strong {
+  color: var(--text-strong);
+}
+
+.shared-context-grid span {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.reviewer-prompts {
+  display: grid;
+  gap: 8px;
+}
+
+.reviewer-prompts p {
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-elev);
+  line-height: 1.45;
+}
+
 .framework-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -1492,9 +1663,13 @@ kbd {
   .start-panel-grid,
   .session-summary,
   .session-guide,
+  .share-form-grid,
+  .share-detail-setting,
   .bank-strip,
   .coverage-grid,
   .scoring-guide-grid,
+  .timing-grid,
+  .shared-context-grid,
   .attempt-row,
   .result-summary,
   .review-card dl {

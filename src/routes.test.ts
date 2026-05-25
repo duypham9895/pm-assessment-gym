@@ -62,6 +62,10 @@ describe("route helpers", () => {
       route: { kind: "frameworks" },
       canonicalPath: "/frameworks",
     });
+    expect(parseRoute("/shared-review")).toEqual({
+      route: { kind: "sharedReview" },
+      canonicalPath: "/shared-review",
+    });
     expect(parseRoute("/results/attempt-123")).toEqual({
       route: { kind: "results", attemptId: "attempt-123" },
       canonicalPath: "/results/attempt-123",
@@ -112,6 +116,7 @@ describe("route helpers", () => {
   it("builds canonical paths and route titles", () => {
     expect(pathForRoute({ kind: "home" })).toBe("/");
     expect(pathForRoute({ kind: "frameworks" })).toBe("/frameworks");
+    expect(pathForRoute({ kind: "sharedReview" })).toBe("/shared-review");
     expect(pathForRoute({ kind: "results", attemptId: "attempt-123" })).toBe(
       "/results/attempt-123"
     );
@@ -140,6 +145,9 @@ describe("route helpers", () => {
       })
     ).toBe(`${TOPIC_LABELS.data_interpretation} Drill - Practice | PM Assessment Gym`);
     expect(titleForRoute({ kind: "frameworks" })).toBe("Frameworks | PM Assessment Gym");
+    expect(titleForRoute({ kind: "sharedReview" })).toBe(
+      "Shared Review | PM Assessment Gym"
+    );
     expect(titleForRoute({ kind: "results", attemptId: "attempt-123" })).toBe(
       "Results | PM Assessment Gym"
     );

@@ -6,6 +6,13 @@ import type {
 } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FRAMEWORKS_MARKDOWN } from "./frameworks";
+import {
+  addQuestionVisibleSeconds,
+  buildTimingSummary,
+  markQuestionSeen,
+  recordQuestionAnswered,
+  type TimingSummary,
+} from "./questionTiming";
 import { FULL_MOCK_QUESTION_COUNT, QUESTIONS, TOPIC_LABELS, TOPIC_ORDER } from "./questions";
 import {
   buildQuestionReviews,
@@ -22,6 +29,14 @@ import {
   titleForRoute,
 } from "./routes";
 import { CONFIDENCE_SHORTCUTS, getGlobalShortcutAction, SHORTCUT_DEFINITIONS } from "./shortcuts";
+import {
+  buildShareReviewPacket,
+  parseShareReviewPacketText,
+  renderShareReviewMarkdown,
+  type ShareCandidateContext,
+  type ShareDetailPreset,
+  type ShareReviewPacket,
+} from "./shareReport";
 import {
   clearActiveSessionSnapshot,
   findAttemptById,
@@ -46,7 +61,7 @@ import type {
   Topic,
 } from "./types";
 
-type View = "home" | "test" | "results" | "frameworks";
+type View = "home" | "test" | "results" | "frameworks" | "sharedReview";
 type ThemeMode = "light" | "dark";
 type RouteNotice = NonNullable<ParsedRoute["message"]>;
 
@@ -89,6 +104,7 @@ function getSelectionFromRoute(route: AppRoute): {
 
 function getViewFromRoute(route: AppRoute, resultAttempt: Attempt | null): View {
   if (route.kind === "frameworks") return "frameworks";
+  if (route.kind === "sharedReview") return "sharedReview";
   if (route.kind === "results" && resultAttempt) return "results";
   return "home";
 }
@@ -380,6 +396,12 @@ export default function App() {
         return;
       }
 
+      if (parsed.route.kind === "sharedReview") {
+        setLatestAttempt(null);
+        setView("sharedReview");
+        return;
+      }
+
       if (parsed.route.kind === "results") {
         const routeAttempt = findRouteAttempt(parsed.route);
         setLatestAttempt(routeAttempt);
@@ -537,16 +559,20 @@ export default function App() {
       const defaultTimeLimitSeconds =
         nextMode === "full_mock" ? 30 * 60 : Math.max(nextQuestions.length, 1) * 90;
       const timeLimitSeconds = getTimerOverrideSeconds() ?? defaultTimeLimitSeconds;
+      const startedAt = new Date().toISOString();
       const nextSession: TestSession = {
         id: createId("session"),
         mode: nextMode,
         feedbackMode: nextFeedbackMode,
         topicFilter: nextMode === "topic_drill" ? nextTopic : undefined,
-        startedAt: new Date().toISOString(),
+        startedAt,
         timeLimitSeconds,
         questionIds: nextQuestions.map((question) => question.id),
         answers: {},
         currentQuestionIndex: 0,
+        questionTimings: nextQuestions[0]
+          ? markQuestionSeen({}, nextQuestions[0].id, startedAt)
+          : {},
       };
 
       setSelectedMode(nextMode);
@@ -592,9 +618,11 @@ export default function App() {
         startedAt: session.startedAt,
         submittedAt,
         durationSeconds: Math.max(0, session.timeLimitSeconds - remainingSeconds),
+        timeLimitSeconds: session.timeLimitSeconds,
         questionIds: session.questionIds,
         answers: session.answers,
         score: scoreQuestions(selectedQuestions, session.answers),
+        questionTimings: session.questionTimings,
       };
 
       const storedAttempts = saveAttempt(attempt);
@@ -614,9 +642,16 @@ export default function App() {
         const questionId = previous.questionIds[previous.currentQuestionIndex];
         const previousAnswer = previous.answers[questionId];
         if (isPracticeAnswerLocked(previous, questionId)) return previous;
+        if (previousAnswer?.choiceId === choiceId) return previous;
+        const now = new Date().toISOString();
+        const questionTimings = recordQuestionAnswered(previous.questionTimings ?? {}, questionId, {
+          at: now,
+          changedChoice: Boolean(previousAnswer && previousAnswer.choiceId !== choiceId),
+        });
 
         return {
           ...previous,
+          questionTimings,
           answers: {
             ...previous.answers,
             [questionId]: {
@@ -644,9 +679,14 @@ export default function App() {
         const previousAnswer = previous.answers[questionId];
         if (!previousAnswer) return previous;
         if (isPracticeAnswerLocked(previous, questionId)) return previous;
+        if (previousAnswer.confidence === confidence) return previous;
 
         return {
           ...previous,
+          questionTimings: recordQuestionAnswered(previous.questionTimings ?? {}, questionId, {
+            at: new Date().toISOString(),
+            changedChoice: false,
+          }),
           answers: {
             ...previous.answers,
             [questionId]: {
@@ -665,7 +705,16 @@ export default function App() {
       if (!previous) return previous;
       const nextIndex = previous.currentQuestionIndex + direction;
       if (nextIndex < 0 || nextIndex >= previous.questionIds.length) return previous;
-      return { ...previous, currentQuestionIndex: nextIndex };
+      const nextQuestionId = previous.questionIds[nextIndex];
+      return {
+        ...previous,
+        currentQuestionIndex: nextIndex,
+        questionTimings: markQuestionSeen(
+          previous.questionTimings ?? {},
+          nextQuestionId,
+          new Date().toISOString()
+        ),
+      };
     });
   }, []);
 
@@ -673,7 +722,16 @@ export default function App() {
     setSession((previous) => {
       if (!previous) return previous;
       if (index < 0 || index >= previous.questionIds.length) return previous;
-      return { ...previous, currentQuestionIndex: index };
+      const nextQuestionId = previous.questionIds[index];
+      return {
+        ...previous,
+        currentQuestionIndex: index,
+        questionTimings: markQuestionSeen(
+          previous.questionTimings ?? {},
+          nextQuestionId,
+          new Date().toISOString()
+        ),
+      };
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
@@ -696,6 +754,19 @@ export default function App() {
 
     const interval = window.setInterval(() => {
       setRemainingSeconds((seconds) => Math.max(seconds - 1, 0));
+      setSession((previous) => {
+        if (!previous) return previous;
+        const questionId = previous.questionIds[previous.currentQuestionIndex];
+        return {
+          ...previous,
+          questionTimings: addQuestionVisibleSeconds(
+            previous.questionTimings ?? {},
+            questionId,
+            1,
+            new Date().toISOString()
+          ),
+        };
+      });
     }, 1000);
 
     return () => window.clearInterval(interval);
@@ -772,18 +843,32 @@ export default function App() {
   const resultData = useMemo(() => {
     if (!latestAttempt) {
       return {
+        questions: [] as Question[],
         allReviews: [] as QuestionReview[],
         wrongReviews: [] as QuestionReview[],
         correctCount: 0,
+        timingSummary: undefined as TimingSummary | undefined,
       };
     }
 
     const questions = getQuestionsFromAttempt(latestAttempt);
     const allReviews = buildQuestionReviews(questions, latestAttempt.answers);
     return {
+      questions,
       allReviews,
       wrongReviews: getWrongReviewsByPriority(allReviews),
       correctCount: allReviews.filter((review) => review.isCorrect).length,
+      timingSummary: buildTimingSummary({
+        questions,
+        reviews: allReviews,
+        questionTimings: latestAttempt.questionTimings,
+        durationSeconds: latestAttempt.durationSeconds,
+        timeLimitSeconds:
+          latestAttempt.timeLimitSeconds ??
+          (latestAttempt.mode === "full_mock"
+            ? 30 * 60
+            : latestAttempt.questionIds.length * 90),
+      }),
     };
   }, [latestAttempt]);
 
@@ -823,6 +908,7 @@ export default function App() {
             startSession({ mode: "topic_drill", feedbackMode: "practice", topic })
           }
           onFrameworks={() => navigateToRoute({ kind: "frameworks" })}
+          onSharedReview={() => navigateToRoute({ kind: "sharedReview" })}
         />
       )}
 
@@ -862,7 +948,10 @@ export default function App() {
       {view === "results" && latestAttempt && (
         <ResultsView
           attempt={latestAttempt}
+          allReviews={resultData.allReviews}
           correctCount={resultData.correctCount}
+          questions={resultData.questions}
+          timingSummary={resultData.timingSummary}
           wrongReviews={resultData.wrongReviews}
           themeToggle={themeToggle}
           onFullMock={() => startSession({ mode: "full_mock", feedbackMode: "exam" })}
@@ -876,6 +965,13 @@ export default function App() {
 
       {view === "frameworks" && (
         <FrameworksView
+          themeToggle={themeToggle}
+          onBack={() => navigateToRoute({ kind: "home" })}
+        />
+      )}
+
+      {view === "sharedReview" && (
+        <SharedReviewView
           themeToggle={themeToggle}
           onBack={() => navigateToRoute({ kind: "home" })}
         />
@@ -902,6 +998,28 @@ function getFocusableElements(container: HTMLElement) {
       element.getAttribute("aria-hidden") !== "true" &&
       element.getAttribute("hidden") === null
   );
+}
+
+function trapFocusInDialog(event: ReactKeyboardEvent<HTMLDivElement>, dialog: HTMLElement | null) {
+  if (event.key !== "Tab") return;
+  if (!dialog) return;
+
+  const focusableElements = getFocusableElements(dialog);
+  if (focusableElements.length === 0) {
+    event.preventDefault();
+    return;
+  }
+
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements[focusableElements.length - 1];
+
+  if (event.shiftKey && document.activeElement === firstElement) {
+    event.preventDefault();
+    lastElement.focus();
+  } else if (!event.shiftKey && document.activeElement === lastElement) {
+    event.preventDefault();
+    firstElement.focus();
+  }
 }
 
 function ModalOverlay({
@@ -1001,27 +1119,7 @@ function ShortcutsHelpOverlay({
   }, []);
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Tab") return;
-
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    const focusableElements = getFocusableElements(dialog);
-    if (focusableElements.length === 0) {
-      event.preventDefault();
-      return;
-    }
-
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-
-    if (event.shiftKey && document.activeElement === firstElement) {
-      event.preventDefault();
-      lastElement.focus();
-    } else if (!event.shiftKey && document.activeElement === lastElement) {
-      event.preventDefault();
-      firstElement.focus();
-    }
+    trapFocusInDialog(event, dialogRef.current);
   };
 
   return (
@@ -1125,6 +1223,7 @@ type HomeViewProps = {
   onBaselineMock: () => void;
   onWeakTopicDrill: (topic: Topic) => void;
   onFrameworks: () => void;
+  onSharedReview: () => void;
 };
 
 function HomeView({
@@ -1142,6 +1241,7 @@ function HomeView({
   onBaselineMock,
   onWeakTopicDrill,
   onFrameworks,
+  onSharedReview,
 }: HomeViewProps) {
   const latestAttempt = attempts[0];
   const latestWeakTopic = latestAttempt?.score.weakestTopic;
@@ -1163,6 +1263,9 @@ function HomeView({
         </div>
         <div className="header-actions">
           {themeToggle}
+          <button className="secondary-button" type="button" onClick={onSharedReview}>
+            Review packet
+          </button>
           <button className="secondary-button" type="button" onClick={onFrameworks}>
             Frameworks
           </button>
@@ -1807,7 +1910,10 @@ function TestView({
 
 type ResultsViewProps = {
   attempt: Attempt;
+  allReviews: QuestionReview[];
   correctCount: number;
+  questions: Question[];
+  timingSummary?: TimingSummary;
   wrongReviews: QuestionReview[];
   themeToggle: ReactNode;
   onFullMock: () => void;
@@ -1818,7 +1924,10 @@ type ResultsViewProps = {
 
 function ResultsView({
   attempt,
+  allReviews,
   correctCount,
+  questions,
+  timingSummary,
   wrongReviews,
   themeToggle,
   onFullMock,
@@ -1829,6 +1938,15 @@ function ResultsView({
   const weakestTopic = attempt.score.weakestTopic;
   const falseConfidenceCount = wrongReviews.filter((review) => review.confidence === 3).length;
   const unansweredCount = wrongReviews.filter((review) => !review.chosenChoiceId).length;
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const shareOpenerRef = useRef<HTMLButtonElement>(null);
+
+  const closeShareDialog = useCallback(() => {
+    setIsShareDialogOpen(false);
+    window.setTimeout(() => {
+      shareOpenerRef.current?.focus();
+    }, 0);
+  }, []);
 
   return (
     <div className="stack">
@@ -1945,6 +2063,8 @@ function ResultsView({
         </p>
       </section>
 
+      {timingSummary?.hasTiming && <TimingSummaryPanel summary={timingSummary} />}
+
       <section className="panel">
         <div className="section-heading">
           <h2>Topic Breakdown</h2>
@@ -2023,11 +2143,355 @@ function ResultsView({
         <button className="secondary-button" type="button" onClick={onFrameworks}>
           Refresh frameworks
         </button>
+        <button
+          className="secondary-button"
+          type="button"
+          ref={shareOpenerRef}
+          onClick={() => setIsShareDialogOpen(true)}
+        >
+          Share for review
+        </button>
         <button className="secondary-button" type="button" onClick={onHome}>
           Back home
         </button>
       </div>
+
+      {isShareDialogOpen && (
+        <ShareReviewDialog
+          attempt={attempt}
+          questions={questions}
+          reviews={allReviews}
+          onClose={closeShareDialog}
+        />
+      )}
     </div>
+  );
+}
+
+function TimingSummaryPanel({ summary }: { summary: TimingSummary }) {
+  const slowestMiss = summary.slowestMisses[0];
+  const overInvested = summary.overInvestedQuestions[0];
+
+  return (
+    <section className="panel timing-panel">
+      <div className="section-heading">
+        <h2>Pacing Review</h2>
+        <span>Local per-question timing</span>
+      </div>
+      <div className="timing-grid">
+        <div>
+          <strong>Slowest missed</strong>
+          <p>
+            {slowestMiss
+              ? `Q${slowestMiss.attemptQuestionNumber} ${slowestMiss.topicLabel}, ${formatDuration(
+                  slowestMiss.totalVisibleSeconds
+                )}`
+              : "No missed-question pacing signal."}
+          </p>
+        </div>
+        <div>
+          <strong>Over-invested</strong>
+          <p>
+            {overInvested
+              ? `Q${overInvested.attemptQuestionNumber} took ${formatDuration(
+                  overInvested.totalVisibleSeconds
+                )} against a ${overInvested.estimatedSeconds}s target.`
+              : "No question crossed the over-investment threshold."}
+          </p>
+        </div>
+        <div>
+          <strong>Unanswered/time-expired signal</strong>
+          <p>
+            {summary.unansweredTimeExpired
+              ? "Time expired with unanswered questions."
+              : "No time-expired unanswered signal."}
+          </p>
+        </div>
+      </div>
+      <p className="timing-caveat">{summary.pacingCaveat}</p>
+    </section>
+  );
+}
+
+const TEST_CONDITION_OPTIONS: Array<{
+  value: ShareCandidateContext["testConditions"];
+  label: string;
+}> = [
+  { value: "timed_uninterrupted", label: "Timed and uninterrupted" },
+  { value: "timed_interrupted", label: "Timed but interrupted" },
+  { value: "untimed_or_paused", label: "Untimed or paused" },
+  { value: "practice_learning", label: "Practice / learning pass" },
+];
+
+function ShareReviewDialog({
+  attempt,
+  questions,
+  reviews,
+  onClose,
+}: {
+  attempt: Attempt;
+  questions: Question[];
+  reviews: QuestionReview[];
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const targetRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLTextAreaElement>(null);
+  const [identityMode, setIdentityMode] =
+    useState<ShareCandidateContext["identityMode"]>("anonymous");
+  const [displayLabel, setDisplayLabel] = useState("");
+  const [targetRoleOrAssessment, setTargetRoleOrAssessment] = useState("");
+  const [feedbackRequest, setFeedbackRequest] = useState("");
+  const [testConditions, setTestConditions] = useState<
+    ShareCandidateContext["testConditions"] | ""
+  >("");
+  const [deadline, setDeadline] = useState("");
+  const [targetCompanyOrProductArea, setTargetCompanyOrProductArea] = useState("");
+  const [selfAssessment, setSelfAssessment] = useState("");
+  const [seniorQuestion, setSeniorQuestion] = useState("");
+  const [detailPreset, setDetailPreset] = useState<ShareDetailPreset>("senior_brief");
+  const [copyStatus, setCopyStatus] = useState("");
+
+  useEffect(() => {
+    targetRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const isContextComplete = Boolean(
+    targetRoleOrAssessment.trim() && feedbackRequest.trim() && testConditions
+  );
+
+  const markdownPreview = useMemo(() => {
+    if (!isContextComplete || !testConditions) return "";
+
+    const context: ShareCandidateContext = {
+      identityMode,
+      displayLabel,
+      targetRoleOrAssessment,
+      feedbackRequest,
+      testConditions,
+      deadline,
+      targetCompanyOrProductArea,
+      selfAssessment,
+      seniorQuestion,
+    };
+
+    const packet = buildShareReviewPacket({
+      attempt,
+      questions,
+      reviews,
+      context,
+      options: { detailPreset },
+    });
+
+    return renderShareReviewMarkdown(packet);
+  }, [
+    attempt,
+    deadline,
+    detailPreset,
+    displayLabel,
+    feedbackRequest,
+    identityMode,
+    isContextComplete,
+    questions,
+    reviews,
+    selfAssessment,
+    seniorQuestion,
+    targetCompanyOrProductArea,
+    targetRoleOrAssessment,
+    testConditions,
+  ]);
+
+  const handleCopy = async () => {
+    if (!markdownPreview) return;
+
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(markdownPreview);
+      setCopyStatus("Review packet copied. Share it with a trusted reviewer.");
+    } catch {
+      previewRef.current?.focus();
+      previewRef.current?.select();
+      setCopyStatus("Copy failed. Select the preview text and copy it manually.");
+    }
+  };
+
+  return (
+    <ModalOverlay
+      className="share-dialog"
+      dialogRef={dialogRef}
+      labelledBy="share-dialog-title"
+      onClose={onClose}
+      onKeyDown={(event) => trapFocusInDialog(event, dialogRef.current)}
+    >
+      <div className="share-dialog-header">
+        <div>
+          <h2 id="share-dialog-title">Share for senior review</h2>
+          <p>Create a coaching packet with your context, attempt summary, priority mistakes, and next practice plan.</p>
+        </div>
+      </div>
+
+      <div className="share-form-grid">
+        <label className="control-block">
+          <span className="control-label">Target role or assessment</span>
+          <input
+            ref={targetRef}
+            value={targetRoleOrAssessment}
+            onChange={(event) => setTargetRoleOrAssessment(event.target.value)}
+            placeholder="Senior PM analytical screen, Meta-style PM interview"
+            required
+          />
+        </label>
+
+        <label className="control-block">
+          <span className="control-label">Test conditions</span>
+          <select
+            value={testConditions}
+            onChange={(event) =>
+              setTestConditions(event.target.value as ShareCandidateContext["testConditions"])
+            }
+            required
+          >
+            <option value="">Select conditions</option>
+            {TEST_CONDITION_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <label className="control-block">
+        <span className="control-label">Feedback request</span>
+        <textarea
+          value={feedbackRequest}
+          onChange={(event) => setFeedbackRequest(event.target.value)}
+          placeholder="Tell me whether my misses are mostly metrics, statistics, or product judgment."
+          rows={3}
+          required
+        />
+      </label>
+
+      <div className="share-form-grid">
+        <label className="control-block">
+          <span className="control-label">Share identity</span>
+          <select
+            aria-label="Share identity"
+            value={identityMode}
+            onChange={(event) =>
+              setIdentityMode(event.target.value as ShareCandidateContext["identityMode"])
+            }
+          >
+            <option value="anonymous">Anonymous candidate</option>
+            <option value="display_label">Use my name or label</option>
+          </select>
+        </label>
+
+        {identityMode === "display_label" && (
+          <label className="control-block">
+            <span className="control-label">Display label</span>
+            <input
+              value={displayLabel}
+              onChange={(event) => setDisplayLabel(event.target.value)}
+              placeholder="Edward, E.P., Candidate"
+            />
+          </label>
+        )}
+      </div>
+
+      <div className="share-form-grid">
+        <label className="control-block">
+          <span className="control-label">Interview date or deadline</span>
+          <input
+            value={deadline}
+            onChange={(event) => setDeadline(event.target.value)}
+            placeholder="2026-06-01"
+          />
+        </label>
+        <label className="control-block">
+          <span className="control-label">Target company / product area</span>
+          <input
+            value={targetCompanyOrProductArea}
+            onChange={(event) => setTargetCompanyOrProductArea(event.target.value)}
+            placeholder="Growth, marketplace, analytics-heavy PM"
+          />
+        </label>
+      </div>
+
+      <div className="share-form-grid">
+        <label className="control-block">
+          <span className="control-label">My self-assessment</span>
+          <textarea
+            value={selfAssessment}
+            onChange={(event) => setSelfAssessment(event.target.value)}
+            rows={3}
+          />
+        </label>
+        <label className="control-block">
+          <span className="control-label">Specific question for senior</span>
+          <textarea
+            value={seniorQuestion}
+            onChange={(event) => setSeniorQuestion(event.target.value)}
+            rows={3}
+          />
+        </label>
+      </div>
+
+      <div className="share-detail-setting">
+        <span className="control-label">Detail preset</span>
+        <div className="segmented-control" aria-label="Detail preset">
+          <button
+            type="button"
+            className={detailPreset === "senior_brief" ? "active" : ""}
+            aria-pressed={detailPreset === "senior_brief"}
+            onClick={() => setDetailPreset("senior_brief")}
+          >
+            Senior Brief
+          </button>
+          <button
+            type="button"
+            className={detailPreset === "safe_summary" ? "active" : ""}
+            aria-pressed={detailPreset === "safe_summary"}
+            onClick={() => setDetailPreset("safe_summary")}
+          >
+            Safe Summary
+          </button>
+        </div>
+        <p>
+          Senior Brief can include missed question prompts, correct answers, and explanations.
+          Safe Summary omits full prompts and answer text.
+        </p>
+      </div>
+
+      <label className="control-block">
+        <span className="control-label">Markdown preview</span>
+        <textarea
+          ref={previewRef}
+          className="share-preview"
+          value={
+            markdownPreview ||
+            "Complete target, feedback request, and test conditions to generate a preview."
+          }
+          readOnly
+          rows={12}
+        />
+      </label>
+
+      <p className="share-copy-status" role="status" aria-live="polite">
+        {copyStatus}
+      </p>
+
+      <div className="share-dialog-actions">
+        <button className="primary-button" type="button" disabled={!markdownPreview} onClick={handleCopy}>
+          Copy review packet
+        </button>
+        <button className="secondary-button" type="button" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </ModalOverlay>
   );
 }
 
@@ -2064,6 +2528,217 @@ function WrongReviewCard({ review }: { review: QuestionReview }) {
         ))}
       </div>
     </article>
+  );
+}
+
+function SharedReviewView({
+  themeToggle,
+  onBack,
+}: {
+  themeToggle: ReactNode;
+  onBack: () => void;
+}) {
+  const [rawPacket, setRawPacket] = useState("");
+  const [packet, setPacket] = useState<ShareReviewPacket | null>(null);
+  const [error, setError] = useState("");
+
+  const renderPacket = () => {
+    const parsed = parseShareReviewPacketText(rawPacket);
+    if (!parsed.ok) {
+      setPacket(null);
+      setError(parsed.message);
+      return;
+    }
+
+    setPacket(parsed.packet);
+    setError("");
+  };
+
+  return (
+    <div className="stack">
+      <header className="top-header">
+        <div>
+          <h1>Shared Review</h1>
+          <p>Local packet review for senior coaching</p>
+        </div>
+        <div className="header-actions">
+          {themeToggle}
+          <button className="secondary-button" type="button" onClick={onBack}>
+            Back home
+          </button>
+        </div>
+      </header>
+
+      <section className="panel shared-review-input">
+        <label className="control-block">
+          <span className="control-label">Review packet</span>
+          <textarea
+            value={rawPacket}
+            onChange={(event) => setRawPacket(event.target.value)}
+            rows={10}
+          />
+        </label>
+        <div className="result-actions">
+          <button className="primary-button" type="button" onClick={renderPacket}>
+            Render review
+          </button>
+        </div>
+        {error && (
+          <p className="import-error" role="alert">
+            {error}
+          </p>
+        )}
+      </section>
+
+      {packet && <ImportedPacketReview packet={packet} />}
+    </div>
+  );
+}
+
+function ImportedPacketReview({ packet }: { packet: ShareReviewPacket }) {
+  return (
+    <div className="stack shared-review-rendered">
+      <section className="result-summary">
+        <div className="score-card">
+          <span>Score</span>
+          <strong>
+            {packet.score.correctCount}/{packet.score.totalCount}
+          </strong>
+          <span>{packet.score.percent}%</span>
+        </div>
+        <div className="score-card">
+          <span>Weakest topic</span>
+          <strong>{packet.score.weakestTopicLabel ?? "None"}</strong>
+          <span>{packet.score.highConfidenceWrongCount} confident wrong</span>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Context</h2>
+          <span>{packet.detailPreset === "senior_brief" ? "Senior Brief" : "Safe Summary"}</span>
+        </div>
+        <div className="shared-context-grid">
+          <div>
+            <strong>Candidate</strong>
+            <span>{packet.candidateContext.displayLabel}</span>
+          </div>
+          <div>
+            <strong>Target</strong>
+            <span>{packet.candidateContext.targetRoleOrAssessment}</span>
+          </div>
+          <div>
+            <strong>Feedback request</strong>
+            <span>{packet.candidateContext.feedbackRequest}</span>
+          </div>
+          <div>
+            <strong>Attempt</strong>
+            <span>
+              {modeLabel(packet.attempt.mode)} · {feedbackModeLabel(packet.attempt.feedbackMode)}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Topic Breakdown</h2>
+          <span>{packet.attempt.totalQuestions} questions</span>
+        </div>
+        <div className="breakdown-table" role="table" aria-label="Imported topic breakdown">
+          <div className="breakdown-row header" role="row">
+            <span>Topic</span>
+            <span>Correct</span>
+            <span>Total</span>
+            <span>Percent</span>
+          </div>
+          {packet.topics.map((topic) => (
+            <div className="breakdown-row" key={topic.topic} role="row">
+              <span>{topic.label}</span>
+              <span>{topic.correct}</span>
+              <span>{topic.total}</span>
+              <span>{topic.percent}%</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Confidence Calibration</h2>
+          <span>{packet.confidence.falseConfidenceCount} false-confidence signals</span>
+        </div>
+        <div className="breakdown-table" role="table" aria-label="Imported confidence calibration">
+          <div className="breakdown-row header confidence-breakdown-row" role="row">
+            <span>Confidence</span>
+            <span>Correct</span>
+            <span>Wrong</span>
+            <span>Unanswered</span>
+          </div>
+          {packet.confidence.rows.map((row) => (
+            <div className="breakdown-row confidence-breakdown-row" key={row.confidence} role="row">
+              <span>{row.label}</span>
+              <span>{row.correct}</span>
+              <span>{row.wrong}</span>
+              <span>{row.unanswered}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {packet.timing && <TimingSummaryPanel summary={packet.timing} />}
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Priority Mistakes</h2>
+          <span>{packet.priorityMistakes.length} review items</span>
+        </div>
+        {packet.priorityMistakes.length === 0 ? (
+          <p className="empty-state">No priority mistakes were included in this packet.</p>
+        ) : (
+          <div className="review-list">
+            {packet.priorityMistakes.map((mistake) => (
+              <article className="review-card" key={mistake.questionId}>
+                <div className="review-card-header">
+                  <span>
+                    Q{mistake.attemptQuestionNumber} · {mistake.topicLabel}
+                  </span>
+                  <strong>{mistake.priorityReason.replace(/_/g, " ")}</strong>
+                </div>
+                {mistake.prompt && <h3>{mistake.prompt}</h3>}
+                <dl>
+                  <div>
+                    <dt>Tags</dt>
+                    <dd>{mistake.conceptTags.join(", ") || "None"}</dd>
+                  </div>
+                  <div>
+                    <dt>Timing</dt>
+                    <dd>
+                      {mistake.timingSeconds !== undefined
+                        ? formatDuration(mistake.timingSeconds)
+                        : "Not included"}
+                    </dd>
+                  </div>
+                </dl>
+                {mistake.explanation && <p>{mistake.explanation}</p>}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Reviewer Prompts</h2>
+          <span>Use for the debrief</span>
+        </div>
+        <div className="reviewer-prompts">
+          {packet.reviewerPrompts.map((prompt) => (
+            <p key={prompt}>{prompt}</p>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 

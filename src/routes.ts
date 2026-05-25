@@ -10,6 +10,7 @@ export type AppRoute =
       topic?: Topic;
     }
   | { kind: "frameworks" }
+  | { kind: "sharedReview" }
   | { kind: "results"; attemptId: string };
 
 export type ParsedRoute = {
@@ -71,6 +72,7 @@ export function topicFromSlug(slug: string): Topic | undefined {
 export function pathForRoute(route: AppRoute): string {
   if (route.kind === "home") return "/";
   if (route.kind === "frameworks") return "/frameworks";
+  if (route.kind === "sharedReview") return "/shared-review";
   if (route.kind === "results") return `/results/${encodeURIComponent(route.attemptId)}`;
 
   if (route.mode === "full_mock") {
@@ -95,6 +97,10 @@ export function parseRoute(
 
   if (segments.length === 1 && segments[0] === "frameworks") {
     return { route: { kind: "frameworks" }, canonicalPath: "/frameworks" };
+  }
+
+  if (segments.length === 1 && segments[0] === "shared-review") {
+    return { route: { kind: "sharedReview" }, canonicalPath: "/shared-review" };
   }
 
   if (segments[0] === "full-mock") {
@@ -180,6 +186,7 @@ export function parseRoute(
 export function titleForRoute(route: AppRoute): string {
   if (route.kind === "home") return "PM Assessment Gym";
   if (route.kind === "frameworks") return "Frameworks | PM Assessment Gym";
+  if (route.kind === "sharedReview") return "Shared Review | PM Assessment Gym";
   if (route.kind === "results") return "Results | PM Assessment Gym";
 
   const feedbackLabel = route.feedbackMode === "exam" ? "Exam" : "Practice";
