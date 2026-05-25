@@ -18,8 +18,8 @@ jobs:
   discover:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -27,7 +27,7 @@ jobs:
       - run: npm run enrich:crawl
       - run: npm run enrich:verify:auto
       - run: npm run validate:questions
-      - uses: peter-evans/create-pull-request@v6
+      - uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(enrichment): stage daily PM assessment candidates"
@@ -54,8 +54,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.importApproved == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm

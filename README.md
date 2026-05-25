@@ -154,6 +154,8 @@ Safety rule: do not scrape gated, paywalled, private, login-only, or proprietary
 
 A daily workflow (`.github/workflows/enrichment-pipeline.yml`) runs discovery only: it crawls/ingests public-source signals, runs automatic verification reporting, validates the existing question bank, and opens a Pull Request with Markdown artifacts for review. It does not auto-import crawled questions into `src/questions.ts`.
 
+Repository settings must allow GitHub Actions to create and approve Pull Requests. The repository can keep default workflow token permissions read-only because this workflow explicitly requests scoped `contents: write` and `pull-requests: write` permissions.
+
 Approved imports are a separate manual approval gate. Run `npm run enrich:import` locally, or manually dispatch the workflow with `importApproved=true`, after Markdown candidates have reviewer approval, answer evidence, originality notes, duplicate clearance, and passing validation.
 
 ## Content validation
