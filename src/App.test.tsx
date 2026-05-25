@@ -7,8 +7,21 @@ import App from "./App";
 import { FULL_MOCK_QUESTION_COUNT, QUESTIONS, TOPIC_ORDER } from "./questions";
 import { topicToSlug } from "./routes";
 import { scoreQuestions } from "./scoring";
+import {
+  buildShareReviewPacket,
+  renderShareReviewMarkdown,
+  type ShareCandidateContext,
+} from "./shareReport";
 import { saveActiveSessionSnapshot, saveAttempt } from "./storage";
-import type { ActiveSessionSnapshot, AnswerRecord, Attempt, FeedbackMode, Topic } from "./types";
+import type {
+  ActiveSessionSnapshot,
+  AnswerRecord,
+  Attempt,
+  FeedbackMode,
+  Question,
+  QuestionTimingMap,
+  Topic,
+} from "./types";
 
 function getVisibleQuestion() {
   const heading = screen.getByRole("heading", { level: 1 });
@@ -66,6 +79,76 @@ function createStoredAttempt(id = "attempt-stored"): Attempt {
     answers,
     score: scoreQuestions([question], answers),
   };
+}
+
+function wrongChoiceFor(question: Question) {
+  return question.choices.find((choice) => choice.id !== question.correctChoiceId)!;
+}
+
+function createShareAttempt(id = "attempt-share"): Attempt {
+  const questions = QUESTIONS.slice(0, 3);
+  const wrongQuestion = questions[0];
+  const correctQuestion = questions[1];
+  const answers: Record<string, AnswerRecord> = {
+    [wrongQuestion.id]: { choiceId: wrongChoiceFor(wrongQuestion).id, confidence: 3 },
+    [correctQuestion.id]: { choiceId: correctQuestion.correctChoiceId, confidence: 1 },
+  };
+  const questionTimings: QuestionTimingMap = {
+    [wrongQuestion.id]: {
+      firstSeenAt: "2026-05-24T01:00:00.000Z",
+      answeredAt: "2026-05-24T01:02:30.000Z",
+      lastChangedAt: "2026-05-24T01:02:40.000Z",
+      totalVisibleSeconds: 160,
+      answerChangeCount: 1,
+    },
+    [correctQuestion.id]: {
+      firstSeenAt: "2026-05-24T01:03:00.000Z",
+      answeredAt: "2026-05-24T01:03:30.000Z",
+      lastChangedAt: "2026-05-24T01:03:30.000Z",
+      totalVisibleSeconds: 30,
+      answerChangeCount: 0,
+    },
+    [questions[2].id]: {
+      firstSeenAt: "2026-05-24T01:27:00.000Z",
+      totalVisibleSeconds: 180,
+      answerChangeCount: 0,
+    },
+  };
+
+  return {
+    id,
+    sessionId: "session-share",
+    mode: "full_mock",
+    feedbackMode: "exam",
+    startedAt: "2026-05-24T01:00:00.000Z",
+    submittedAt: "2026-05-24T01:30:00.000Z",
+    durationSeconds: 1800,
+    questionIds: questions.map((question) => question.id),
+    answers,
+    score: scoreQuestions(questions, answers),
+    questionTimings,
+  };
+}
+
+function shareContext(): ShareCandidateContext {
+  return {
+    identityMode: "anonymous",
+    targetRoleOrAssessment: "Senior PM analytical screen",
+    feedbackRequest: "Tell me where my PM reasoning is weakest.",
+    testConditions: "timed_uninterrupted",
+  };
+}
+
+async function fillRequiredShareFields(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(
+    screen.getByLabelText("Target role or assessment"),
+    "Senior PM analytical screen"
+  );
+  await user.type(
+    screen.getByLabelText("Feedback request"),
+    "Tell me where my PM reasoning is weakest."
+  );
+  await user.selectOptions(screen.getByLabelText("Test conditions"), "timed_uninterrupted");
 }
 
 function questionsForTopic(topic: Topic) {
@@ -957,5 +1040,185 @@ describe("App keyboard shortcuts", () => {
 
     fireEvent.keyDown(dialog, { key: "Tab", code: "Tab" });
     expect(firstFocusable).toHaveFocus();
+  });
+});
+
+describe("shared results review", () => {
+  it("shows Share for review on Results but not while taking a test", async () => {
+    const user = userEvent.setup();
+    saveAttempt(createShareAttempt());
+
+    const resultsRender = renderAt("/results/attempt-share");
+    expect(screen.getByRole("button", { name: "Share for review" })).toBeInTheDocument();
+
+    resultsRender.unmount();
+    window.history.replaceState({}, "", "/");
+
+    const rendered = render(<App />);
+    await user.click(screen.getByRole("button", { name: /Start full mock/i }));
+    expect(screen.queryByRole("button", { name: "Share for review" })).not.toBeInTheDocument();
+    rendered.unmount();
+  });
+
+  it("opens and closes the share modal with focus restored to the opener", async () => {
+    const user = userEvent.setup();
+    saveAttempt(createShareAttempt());
+    renderAt("/results/attempt-share");
+
+    const opener = screen.getByRole("button", { name: "Share for review" });
+    await user.click(opener);
+
+    expect(
+      screen.getByRole("dialog", { name: "Share for senior review" })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Target role or assessment")).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByRole("dialog", { name: "Share for senior review" })
+    ).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
+  it("requires senior review context before copying", async () => {
+    const user = userEvent.setup();
+    saveAttempt(createShareAttempt());
+    renderAt("/results/attempt-share");
+
+    await user.click(screen.getByRole("button", { name: "Share for review" }));
+    const copyButton = screen.getByRole("button", { name: "Copy review packet" });
+
+    expect(copyButton).toBeDisabled();
+    expect(screen.getByLabelText("Share identity")).toHaveValue("anonymous");
+
+    await fillRequiredShareFields(user);
+
+    expect(copyButton).toBeEnabled();
+    expect((screen.getByLabelText("Markdown preview") as HTMLTextAreaElement).value).toContain(
+      "# PM Assessment Review Packet"
+    );
+  });
+
+  it("copies the senior brief and announces success", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    saveAttempt(createShareAttempt());
+    renderAt("/results/attempt-share");
+
+    await user.click(screen.getByRole("button", { name: "Share for review" }));
+    await fillRequiredShareFields(user);
+    await user.click(screen.getByRole("button", { name: "Copy review packet" }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("# PM Assessment Review Packet")
+    );
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Senior Brief"));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Review packet copied. Share it with a trusted reviewer."
+    );
+  });
+
+  it("falls back to manual copy when Clipboard API fails", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error("blocked")) },
+    });
+    saveAttempt(createShareAttempt());
+    renderAt("/results/attempt-share");
+
+    await user.click(screen.getByRole("button", { name: "Share for review" }));
+    await fillRequiredShareFields(user);
+    await user.click(screen.getByRole("button", { name: "Copy review packet" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Copy failed. Select the preview text and copy it manually."
+    );
+    expect(screen.getByLabelText("Markdown preview")).toHaveFocus();
+  });
+
+  it("updates the preview when switching from Senior Brief to Safe Summary", async () => {
+    const user = userEvent.setup();
+    const attempt = createShareAttempt();
+    const firstQuestion = QUESTIONS.find((question) => question.id === attempt.questionIds[0])!;
+    saveAttempt(attempt);
+    renderAt("/results/attempt-share");
+
+    await user.click(screen.getByRole("button", { name: "Share for review" }));
+    await fillRequiredShareFields(user);
+
+    const preview = screen.getByLabelText("Markdown preview");
+    expect((preview as HTMLTextAreaElement).value).toContain(firstQuestion.prompt);
+    expect((preview as HTMLTextAreaElement).value).toContain(firstQuestion.explanation);
+
+    await user.click(screen.getByRole("button", { name: "Safe Summary" }));
+
+    expect((preview as HTMLTextAreaElement).value).toContain("Safe Summary");
+    expect((preview as HTMLTextAreaElement).value).not.toContain(firstQuestion.prompt);
+    expect((preview as HTMLTextAreaElement).value).not.toContain(firstQuestion.explanation);
+  });
+
+  it("shows timing summary after a result", () => {
+    saveAttempt(createShareAttempt());
+    renderAt("/results/attempt-share");
+
+    expect(screen.getByRole("heading", { level: 2, name: "Pacing Review" })).toBeInTheDocument();
+    expect(screen.getByText(/Slowest missed/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Time expired with unanswered questions/i).length).toBeGreaterThan(0);
+  });
+
+  it("renders an imported Markdown packet on /shared-review", async () => {
+    const user = userEvent.setup();
+    const attempt = createShareAttempt();
+    const questions = attempt.questionIds.map((questionId) =>
+      QUESTIONS.find((question) => question.id === questionId)
+    ) as Question[];
+    const packet = buildShareReviewPacket({
+      attempt,
+      questions,
+      reviews: questions.map((question) => ({
+        questionId: question.id,
+        topic: question.topic,
+        prompt: question.prompt,
+        chosenChoiceId: attempt.answers[question.id]?.choiceId,
+        confidence: attempt.answers[question.id]?.confidence,
+        correctChoiceId: question.correctChoiceId,
+        isCorrect: attempt.answers[question.id]?.choiceId === question.correctChoiceId,
+        explanation: question.explanation,
+        conceptTags: question.conceptTags,
+      })),
+      context: shareContext(),
+      options: { detailPreset: "senior_brief" },
+      createdAt: "2026-05-24T02:00:00.000Z",
+    });
+    const markdown = renderShareReviewMarkdown(packet);
+    renderAt("/shared-review");
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Shared Review" })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Review packet"), {
+      target: { value: markdown },
+    });
+    await user.click(screen.getByRole("button", { name: "Render review" }));
+
+    expect(screen.getByText("Senior PM analytical screen")).toBeInTheDocument();
+    expect(screen.getByText("1/3")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Priority Mistakes" })).toBeInTheDocument();
+  });
+
+  it("shows a safe failure state for invalid imported packets", async () => {
+    const user = userEvent.setup();
+    renderAt("/shared-review");
+
+    await user.type(screen.getByLabelText("Review packet"), "not a valid packet");
+    await user.click(screen.getByRole("button", { name: "Render review" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/could not be read/i);
   });
 });

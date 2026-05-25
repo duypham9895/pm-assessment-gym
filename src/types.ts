@@ -42,6 +42,7 @@ export type TestSession = {
   questionIds: string[];
   answers: Record<string, AnswerRecord>;
   currentQuestionIndex: number;
+  questionTimings?: QuestionTimingMap;
 };
 
 export type ActiveSessionSnapshot = {
@@ -79,6 +80,16 @@ export type QuestionReview = {
   conceptTags: string[];
 };
 
+export type QuestionTimingRecord = {
+  firstSeenAt: string;
+  answeredAt?: string;
+  lastChangedAt?: string;
+  totalVisibleSeconds: number;
+  answerChangeCount: number;
+};
+
+export type QuestionTimingMap = Record<string, QuestionTimingRecord>;
+
 export type Attempt = {
   id: string;
   sessionId: string;
@@ -88,7 +99,9 @@ export type Attempt = {
   startedAt: string;
   submittedAt: string;
   durationSeconds: number;
+  timeLimitSeconds?: number;
   questionIds: string[];
   answers: Record<string, AnswerRecord>;
   score: ScoreSummary;
+  questionTimings?: QuestionTimingMap;
 };
