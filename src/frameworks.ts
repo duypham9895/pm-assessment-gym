@@ -1,5 +1,5 @@
 export const FRAMEWORKS_MARKDOWN = `
-# PM Assessment Frameworks
+# PM Bench Frameworks
 
 ## Funnel Diagnosis
 - Find the first funnel step that changed: visit, signup, activation, purchase, repeat.

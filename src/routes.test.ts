@@ -132,10 +132,10 @@ describe("route helpers", () => {
       })
     ).toBe("/topic-drill/ab-testing/exam");
 
-    expect(titleForRoute({ kind: "home" })).toBe("PM Assessment Gym");
+    expect(titleForRoute({ kind: "home" })).toBe("PM Bench");
     expect(
       titleForRoute({ kind: "assessment", mode: "full_mock", feedbackMode: "exam" })
-    ).toBe("Full Mock - Exam | PM Assessment Gym");
+    ).toBe("Full Mock - Exam | PM Bench");
     expect(
       titleForRoute({
         kind: "assessment",
@@ -143,13 +143,11 @@ describe("route helpers", () => {
         topic: "data_interpretation",
         feedbackMode: "practice",
       })
-    ).toBe(`${TOPIC_LABELS.data_interpretation} Drill - Practice | PM Assessment Gym`);
-    expect(titleForRoute({ kind: "frameworks" })).toBe("Frameworks | PM Assessment Gym");
-    expect(titleForRoute({ kind: "sharedReview" })).toBe(
-      "Shared Review | PM Assessment Gym"
-    );
+    ).toBe(`${TOPIC_LABELS.data_interpretation} Drill - Practice | PM Bench`);
+    expect(titleForRoute({ kind: "frameworks" })).toBe("Frameworks | PM Bench");
+    expect(titleForRoute({ kind: "sharedReview" })).toBe("Shared Review | PM Bench");
     expect(titleForRoute({ kind: "results", attemptId: "attempt-123" })).toBe(
-      "Results | PM Assessment Gym"
+      "Results | PM Bench"
     );
   });
 });
