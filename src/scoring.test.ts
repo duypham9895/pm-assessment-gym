@@ -5,7 +5,8 @@ import {
   QUESTIONS,
   TOPIC_ORDER,
 } from "./questions";
-import { selectFullMockQuestions } from "./scoring";
+import { buildConfidenceSummary, selectFullMockQuestions } from "./scoring";
+import type { QuestionReview } from "./types";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -82,5 +83,35 @@ describe("selectFullMockQuestions", () => {
     expect(selectedHardAbQuestions.some((question) => recentQuestionIds.has(question.id))).toBe(
       true
     );
+  });
+});
+
+describe("buildConfidenceSummary", () => {
+  it("groups reviews into calibration buckets for results guidance", () => {
+    const reviews = [
+      { questionId: "false-confidence", isCorrect: false, confidence: 3 },
+      { questionId: "lucky-correct-guess", isCorrect: true, confidence: 1 },
+      { questionId: "lucky-correct-unsure", isCorrect: true, confidence: 2 },
+      { questionId: "needs-drill-guess", isCorrect: false, confidence: 1 },
+      { questionId: "needs-drill-unanswered", isCorrect: false },
+      { questionId: "known-strength", isCorrect: true, confidence: 3 },
+    ] as QuestionReview[];
+
+    const summary = buildConfidenceSummary(reviews);
+
+    expect(summary.falseConfidence.map((review) => review.questionId)).toEqual([
+      "false-confidence",
+    ]);
+    expect(summary.luckyCorrect.map((review) => review.questionId)).toEqual([
+      "lucky-correct-guess",
+      "lucky-correct-unsure",
+    ]);
+    expect(summary.needsDrill.map((review) => review.questionId)).toEqual([
+      "needs-drill-guess",
+      "needs-drill-unanswered",
+    ]);
+    expect(summary.knownStrength.map((review) => review.questionId)).toEqual([
+      "known-strength",
+    ]);
   });
 });

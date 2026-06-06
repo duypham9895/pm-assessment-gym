@@ -11,6 +11,13 @@ import type {
   Topic,
 } from "./types";
 
+export type ConfidenceSummary = {
+  falseConfidence: QuestionReview[];
+  luckyCorrect: QuestionReview[];
+  needsDrill: QuestionReview[];
+  knownStrength: QuestionReview[];
+};
+
 type SelectionOptions = {
   recentQuestionIds?: Set<string>;
 };
@@ -198,4 +205,30 @@ export function getWrongReviewsByPriority(reviews: QuestionReview[]): QuestionRe
   return reviews
     .filter((review) => !review.isCorrect)
     .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+}
+
+export function buildConfidenceSummary(reviews: QuestionReview[]): ConfidenceSummary {
+  return reviews.reduce<ConfidenceSummary>(
+    (summary, review) => {
+      const confidence = review.confidence ?? 1;
+
+      if (!review.isCorrect && confidence === 3) {
+        summary.falseConfidence.push(review);
+      } else if (review.isCorrect && confidence < 3) {
+        summary.luckyCorrect.push(review);
+      } else if (!review.isCorrect) {
+        summary.needsDrill.push(review);
+      } else {
+        summary.knownStrength.push(review);
+      }
+
+      return summary;
+    },
+    {
+      falseConfidence: [],
+      luckyCorrect: [],
+      needsDrill: [],
+      knownStrength: [],
+    }
+  );
 }

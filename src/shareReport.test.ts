@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { APP_NAME } from "./branding";
 import { QUESTIONS, TOPIC_LABELS } from "./questions";
 import { buildQuestionReviews, scoreQuestions } from "./scoring";
 import {
   buildShareReviewPacket,
+  getDefaultShareContext,
   parseShareReviewPacketText,
   renderShareReviewMarkdown,
   type ShareCandidateContext,
@@ -73,6 +75,28 @@ function makeAttempt() {
 }
 
 describe("share review packets", () => {
+  it("derives ungated default context for an exam attempt", () => {
+    const { attempt } = makeAttempt();
+
+    const context = getDefaultShareContext(attempt);
+
+    expect(context).toMatchObject({
+      identityMode: "anonymous",
+      displayLabel: "",
+      targetRoleOrAssessment: "PM analytical assessment practice",
+      testConditions: "timed_uninterrupted",
+    });
+    expect(context.feedbackRequest).toMatch(/reasoning risk/i);
+  });
+
+  it("marks practice attempts as learning artifacts by default", () => {
+    const { attempt } = makeAttempt();
+
+    const context = getDefaultShareContext({ ...attempt, feedbackMode: "practice" });
+
+    expect(context.testConditions).toBe("practice_learning");
+  });
+
   it("derives a senior brief without leaking local storage or raw attempt identifiers", () => {
     const { attempt, questions, reviews, wrongQuestion, unansweredQuestion, wrongChoice } =
       makeAttempt();
@@ -137,6 +161,30 @@ describe("share review packets", () => {
     expect(markdown).not.toContain(wrongQuestion.explanation);
   });
 
+  it("renders the default share packet as a safe summary without gated context", () => {
+    const { attempt, questions, reviews, wrongQuestion } = makeAttempt();
+
+    const packet = buildShareReviewPacket({
+      attempt,
+      questions,
+      reviews,
+      context: getDefaultShareContext(attempt),
+      options: { detailPreset: "safe_summary" },
+      createdAt: "2026-05-24T02:00:00.000Z",
+    });
+    const markdown = renderShareReviewMarkdown(packet);
+    const correctText = wrongQuestion.choices.find(
+      (choice) => choice.id === wrongQuestion.correctChoiceId
+    )!.text;
+
+    expect(markdown).toContain("Safe Summary");
+    expect(markdown).toContain("PM analytical assessment practice");
+    expect(markdown).toContain("Review my PM reasoning risk");
+    expect(markdown).not.toContain(wrongQuestion.prompt);
+    expect(markdown).not.toContain(correctText);
+    expect(markdown).not.toContain(wrongQuestion.explanation);
+  });
+
   it("renders importable Markdown with senior-review sections", () => {
     const { attempt, questions, reviews, wrongQuestion } = makeAttempt();
     const packet = buildShareReviewPacket({
@@ -150,7 +198,8 @@ describe("share review packets", () => {
 
     const markdown = renderShareReviewMarkdown(packet);
 
-    expect(markdown).toContain("# PM Assessment Review Packet");
+    expect(packet.appName).toBe(APP_NAME);
+    expect(markdown).toContain(`# ${APP_NAME} Review Packet`);
     expect(markdown).toContain("## Candidate Context");
     expect(markdown).toContain("## Topic Breakdown");
     expect(markdown).toContain("## Confidence Calibration");
@@ -164,8 +213,26 @@ describe("share review packets", () => {
     expect(parsed.ok ? parsed.packet.score.correctCount : 0).toBe(packet.score.correctCount);
   });
 
+  it("imports legacy PM Assessment Gym packets", () => {
+    const { attempt, questions, reviews } = makeAttempt();
+    const packet = buildShareReviewPacket({
+      attempt,
+      questions,
+      reviews,
+      context: makeContext(),
+      options: { detailPreset: "senior_brief" },
+      createdAt: "2026-05-24T02:00:00.000Z",
+    });
+    const legacyPacket = { ...packet, appName: "PM Assessment Gym" };
+
+    const parsed = parseShareReviewPacketText(JSON.stringify(legacyPacket));
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok ? parsed.packet.appName : "").toBe("PM Assessment Gym");
+  });
+
   it("returns a safe parse failure for invalid imported packet text", () => {
-    const parsed = parseShareReviewPacketText("not a PM Assessment packet");
+    const parsed = parseShareReviewPacketText("not a PM Bench packet");
 
     expect(parsed.ok).toBe(false);
     expect(parsed.ok ? "" : parsed.message).toMatch(/could not be read/i);

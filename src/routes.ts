@@ -1,3 +1,4 @@
+import { APP_NAME } from "./branding";
 import { TOPIC_LABELS } from "./questions";
 import type { FeedbackMode, SessionMode, Topic } from "./types";
 
@@ -184,15 +185,15 @@ export function parseRoute(
 }
 
 export function titleForRoute(route: AppRoute): string {
-  if (route.kind === "home") return "PM Assessment Gym";
-  if (route.kind === "frameworks") return "Frameworks | PM Assessment Gym";
-  if (route.kind === "sharedReview") return "Shared Review | PM Assessment Gym";
-  if (route.kind === "results") return "Results | PM Assessment Gym";
+  if (route.kind === "home") return APP_NAME;
+  if (route.kind === "frameworks") return `Frameworks | ${APP_NAME}`;
+  if (route.kind === "sharedReview") return `Shared Review | ${APP_NAME}`;
+  if (route.kind === "results") return `Results | ${APP_NAME}`;
 
   const feedbackLabel = route.feedbackMode === "exam" ? "Exam" : "Practice";
   if (route.mode === "full_mock") {
-    return `Full Mock - ${feedbackLabel} | PM Assessment Gym`;
+    return `Full Mock - ${feedbackLabel} | ${APP_NAME}`;
   }
 
-  return `${TOPIC_LABELS[route.topic ?? "product_analytics"]} Drill - ${feedbackLabel} | PM Assessment Gym`;
+  return `${TOPIC_LABELS[route.topic ?? "product_analytics"]} Drill - ${feedbackLabel} | ${APP_NAME}`;
 }

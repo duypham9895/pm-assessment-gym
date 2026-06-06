@@ -394,7 +394,7 @@ describe("App routes", () => {
     saveActiveSessionSnapshot(createActiveSessionSnapshot());
 
     let rendered = renderAt("/");
-    expect(screen.getByRole("heading", { level: 1, name: "PM Assessment Gym" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "PM Bench" })).toBeInTheDocument();
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
 
     rendered.unmount();
@@ -419,13 +419,13 @@ describe("App routes", () => {
 
     const { unmount } = renderAt("/not-a-real-route");
     expect(window.location.pathname).toBe("/");
-    expect(screen.getByRole("heading", { level: 1, name: "PM Assessment Gym" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "PM Bench" })).toBeInTheDocument();
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
 
     unmount();
     renderAt("/topic-drill/not-a-topic/practice");
     expect(window.location.pathname).toBe("/");
-    expect(screen.getByRole("heading", { level: 1, name: "PM Assessment Gym" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "PM Bench" })).toBeInTheDocument();
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
   });
 
@@ -1068,36 +1068,57 @@ describe("shared results review", () => {
     const opener = screen.getByRole("button", { name: "Share for review" });
     await user.click(opener);
 
-    expect(
-      screen.getByRole("dialog", { name: "Share for senior review" })
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Target role or assessment")).toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Share review packet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy packet" })).toHaveFocus();
 
     await user.keyboard("{Escape}");
 
-    expect(
-      screen.queryByRole("dialog", { name: "Share for senior review" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Share review packet" })).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
   });
 
-  it("requires senior review context before copying", async () => {
+  it("opens share with an immediately copyable Safe Summary", async () => {
+    const user = userEvent.setup();
+    const attempt = createShareAttempt();
+    const firstQuestion = QUESTIONS.find((question) => question.id === attempt.questionIds[0])!;
+    saveAttempt(attempt);
+    renderAt("/results/attempt-share");
+
+    await user.click(screen.getByRole("button", { name: "Share for review" }));
+
+    expect(screen.getByRole("dialog", { name: "Share review packet" })).toBeInTheDocument();
+    const copyButton = screen.getByRole("button", { name: "Copy packet" });
+    expect(copyButton).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Safe Summary" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    const preview = screen.getByLabelText("Markdown preview") as HTMLTextAreaElement;
+    expect(preview.value).toContain("# PM Bench Review Packet");
+    expect(preview.value).toContain("Safe Summary");
+    expect(preview.value).not.toContain(firstQuestion.prompt);
+    expect(preview.value).not.toContain(firstQuestion.explanation);
+  });
+
+  it("reveals optional senior context and updates the preview", async () => {
     const user = userEvent.setup();
     saveAttempt(createShareAttempt());
     renderAt("/results/attempt-share");
 
     await user.click(screen.getByRole("button", { name: "Share for review" }));
-    const copyButton = screen.getByRole("button", { name: "Copy review packet" });
+    const preview = screen.getByLabelText("Markdown preview") as HTMLTextAreaElement;
 
-    expect(copyButton).toBeDisabled();
-    expect(screen.getByLabelText("Share identity")).toHaveValue("anonymous");
+    expect(screen.queryByLabelText("Target role or assessment")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add senior context" }));
 
-    await fillRequiredShareFields(user);
+    expect(screen.getByLabelText("Target role or assessment")).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Target role or assessment"));
+    await user.type(screen.getByLabelText("Target role or assessment"), "Meta analytics PM screen");
+    await user.clear(screen.getByLabelText("Feedback request"));
+    await user.type(screen.getByLabelText("Feedback request"), "Find my sharpest coaching point.");
 
-    expect(copyButton).toBeEnabled();
-    expect((screen.getByLabelText("Markdown preview") as HTMLTextAreaElement).value).toContain(
-      "# PM Assessment Review Packet"
-    );
+    expect(preview.value).toContain("Meta analytics PM screen");
+    expect(preview.value).toContain("Find my sharpest coaching point.");
   });
 
   it("copies the senior brief and announces success", async () => {
@@ -1111,11 +1132,11 @@ describe("shared results review", () => {
     renderAt("/results/attempt-share");
 
     await user.click(screen.getByRole("button", { name: "Share for review" }));
-    await fillRequiredShareFields(user);
-    await user.click(screen.getByRole("button", { name: "Copy review packet" }));
+    await user.click(screen.getByRole("button", { name: "Senior Brief" }));
+    await user.click(screen.getByRole("button", { name: "Copy packet" }));
 
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining("# PM Assessment Review Packet")
+      expect.stringContaining("# PM Bench Review Packet")
     );
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Senior Brief"));
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -1133,8 +1154,7 @@ describe("shared results review", () => {
     renderAt("/results/attempt-share");
 
     await user.click(screen.getByRole("button", { name: "Share for review" }));
-    await fillRequiredShareFields(user);
-    await user.click(screen.getByRole("button", { name: "Copy review packet" }));
+    await user.click(screen.getByRole("button", { name: "Copy packet" }));
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "Copy failed. Select the preview text and copy it manually."
@@ -1142,7 +1162,7 @@ describe("shared results review", () => {
     expect(screen.getByLabelText("Markdown preview")).toHaveFocus();
   });
 
-  it("updates the preview when switching from Senior Brief to Safe Summary", async () => {
+  it("updates the preview when switching from Safe Summary to Senior Brief", async () => {
     const user = userEvent.setup();
     const attempt = createShareAttempt();
     const firstQuestion = QUESTIONS.find((question) => question.id === attempt.questionIds[0])!;
@@ -1150,17 +1170,17 @@ describe("shared results review", () => {
     renderAt("/results/attempt-share");
 
     await user.click(screen.getByRole("button", { name: "Share for review" }));
-    await fillRequiredShareFields(user);
 
     const preview = screen.getByLabelText("Markdown preview");
-    expect((preview as HTMLTextAreaElement).value).toContain(firstQuestion.prompt);
-    expect((preview as HTMLTextAreaElement).value).toContain(firstQuestion.explanation);
-
-    await user.click(screen.getByRole("button", { name: "Safe Summary" }));
-
     expect((preview as HTMLTextAreaElement).value).toContain("Safe Summary");
     expect((preview as HTMLTextAreaElement).value).not.toContain(firstQuestion.prompt);
     expect((preview as HTMLTextAreaElement).value).not.toContain(firstQuestion.explanation);
+
+    await user.click(screen.getByRole("button", { name: "Senior Brief" }));
+
+    expect((preview as HTMLTextAreaElement).value).toContain("Senior Brief");
+    expect((preview as HTMLTextAreaElement).value).toContain(firstQuestion.prompt);
+    expect((preview as HTMLTextAreaElement).value).toContain(firstQuestion.explanation);
   });
 
   it("shows timing summary after a result", () => {

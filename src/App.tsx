@@ -5,6 +5,7 @@ import type {
   RefObject,
 } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { APP_NAME, APP_TAGLINE } from "./branding";
 import { FRAMEWORKS_MARKDOWN } from "./frameworks";
 import {
   addQuestionVisibleSeconds,
@@ -15,7 +16,9 @@ import {
 } from "./questionTiming";
 import { FULL_MOCK_QUESTION_COUNT, QUESTIONS, TOPIC_LABELS, TOPIC_ORDER } from "./questions";
 import {
+  buildConfidenceSummary,
   buildQuestionReviews,
+  type ConfidenceSummary,
   getWrongReviewsByPriority,
   scoreQuestions,
   selectFullMockQuestions,
@@ -31,6 +34,7 @@ import {
 import { CONFIDENCE_SHORTCUTS, getGlobalShortcutAction, SHORTCUT_DEFINITIONS } from "./shortcuts";
 import {
   buildShareReviewPacket,
+  getDefaultShareContext,
   parseShareReviewPacketText,
   renderShareReviewMarkdown,
   type ShareCandidateContext,
@@ -224,6 +228,19 @@ function getQuestionsFromAttempt(attempt: Attempt) {
 function getChoiceText(question: Question, choiceId?: ChoiceId) {
   if (!choiceId) return "Unanswered";
   return question.choices.find((choice) => choice.id === choiceId)?.text ?? "Unknown choice";
+}
+
+function getFrameworkCue(topic?: Topic) {
+  if (!topic) return "Metric Trees";
+  const cues: Record<Topic, string> = {
+    product_analytics: "Metric Trees",
+    data_literacy: "Base Rates",
+    chart_interpretation: "Chart Reading",
+    inductive_reasoning: "Evidence Strength",
+    data_interpretation: "Simpson's Paradox",
+    ab_testing: "A/B Testing",
+  };
+  return cues[topic];
 }
 
 function isPracticeAnswerLocked(session: TestSession, questionId: string) {
@@ -846,6 +863,7 @@ export default function App() {
         questions: [] as Question[],
         allReviews: [] as QuestionReview[],
         wrongReviews: [] as QuestionReview[],
+        confidenceSummary: buildConfidenceSummary([]),
         correctCount: 0,
         timingSummary: undefined as TimingSummary | undefined,
       };
@@ -857,6 +875,7 @@ export default function App() {
       questions,
       allReviews,
       wrongReviews: getWrongReviewsByPriority(allReviews),
+      confidenceSummary: buildConfidenceSummary(allReviews),
       correctCount: allReviews.filter((review) => review.isCorrect).length,
       timingSummary: buildTimingSummary({
         questions,
@@ -949,6 +968,7 @@ export default function App() {
         <ResultsView
           attempt={latestAttempt}
           allReviews={resultData.allReviews}
+          confidenceSummary={resultData.confidenceSummary}
           correctCount={resultData.correctCount}
           questions={resultData.questions}
           timingSummary={resultData.timingSummary}
@@ -1208,6 +1228,15 @@ function ThemeToggle({ theme, onCycle }: { theme: ThemeMode; onCycle: () => void
   );
 }
 
+function BrandStamp() {
+  return (
+    <div className="brand-stamp" aria-hidden="true">
+      <span className="brand-stamp-top">PM /</span>
+      <span className="brand-stamp-bottom">Bench</span>
+    </div>
+  );
+}
+
 type HomeViewProps = {
   attempts: Attempt[];
   selectedMode: SessionMode;
@@ -1257,9 +1286,12 @@ function HomeView({
   return (
     <div className="stack">
       <header className="top-header">
-        <div>
-          <h1>PM Assessment Gym</h1>
-          <p>Timed drills, weak-topic review, and framework refresh for PM assessments</p>
+        <div className="brand-lockup">
+          <BrandStamp />
+          <div>
+            <h1>{APP_NAME}</h1>
+            <p>{APP_TAGLINE}</p>
+          </div>
         </div>
         <div className="header-actions">
           {themeToggle}
@@ -1273,6 +1305,26 @@ function HomeView({
       </header>
 
       <section className="panel start-panel">
+        <div className="quick-launch" aria-label="Quick launch actions">
+          <button className="quick-launch-card primary" type="button" onClick={onBaselineMock}>
+            <span>Diagnose baseline</span>
+            <strong>Full mock · Exam</strong>
+          </button>
+          <button
+            className="quick-launch-card"
+            type="button"
+            disabled={!latestWeakTopic}
+            onClick={() => latestWeakTopic && onWeakTopicDrill(latestWeakTopic)}
+          >
+            <span>Repair weakest topic</span>
+            <strong>{latestWeakTopic ? TOPIC_LABELS[latestWeakTopic] : "Run baseline first"}</strong>
+          </button>
+          <button className="quick-launch-card" type="button" onClick={onFrameworks}>
+            <span>Recall frameworks</span>
+            <strong>Skim decision rules</strong>
+          </button>
+        </div>
+
         <div className="start-panel-grid">
           <div className="start-controls">
             <div className="control-grid">
@@ -1911,6 +1963,7 @@ function TestView({
 type ResultsViewProps = {
   attempt: Attempt;
   allReviews: QuestionReview[];
+  confidenceSummary: ConfidenceSummary;
   correctCount: number;
   questions: Question[];
   timingSummary?: TimingSummary;
@@ -1925,6 +1978,7 @@ type ResultsViewProps = {
 function ResultsView({
   attempt,
   allReviews,
+  confidenceSummary,
   correctCount,
   questions,
   timingSummary,
@@ -1936,8 +1990,11 @@ function ResultsView({
   onHome,
 }: ResultsViewProps) {
   const weakestTopic = attempt.score.weakestTopic;
-  const falseConfidenceCount = wrongReviews.filter((review) => review.confidence === 3).length;
+  const falseConfidenceCount = confidenceSummary.falseConfidence.length;
+  const luckyCorrectCount = confidenceSummary.luckyCorrect.length;
+  const needsDrillCount = confidenceSummary.needsDrill.length;
   const unansweredCount = wrongReviews.filter((review) => !review.chosenChoiceId).length;
+  const frameworkCue = getFrameworkCue(weakestTopic);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const shareOpenerRef = useRef<HTMLButtonElement>(null);
 
@@ -1985,8 +2042,22 @@ function ResultsView({
 
       <section className="panel next-plan-panel">
         <div className="section-heading">
-          <h2>Next Practice Plan</h2>
-          <span>{wrongReviews.length ? "Review first, then drill" : "Protect the baseline"}</span>
+          <h2>Next 10 Minutes</h2>
+          <span>{wrongReviews.length ? "Fix risk, then drill" : "Protect the baseline"}</span>
+        </div>
+        <div className="confidence-insights" aria-label="Confidence calibration summary">
+          <div>
+            <strong>{falseConfidenceCount}</strong>
+            <span>False confidence</span>
+          </div>
+          <div>
+            <strong>{luckyCorrectCount}</strong>
+            <span>Lucky correct</span>
+          </div>
+          <div>
+            <strong>{needsDrillCount}</strong>
+            <span>Needs drill</span>
+          </div>
         </div>
         <div className="next-plan-list">
           <div className="next-plan-item">
@@ -1997,7 +2068,7 @@ function ResultsView({
               </strong>
               <p>
                 {weakestTopic
-                  ? "Use Practice mode for one focused set before returning to a timed mock."
+                  ? "Use Practice mode for one focused set. Treat this as the best next drill, not a permanent diagnosis."
                   : "No weak topic stood out. Re-test under pressure to make sure the score holds."}
               </p>
             </div>
@@ -2034,16 +2105,17 @@ function ResultsView({
                     : "No mistakes to review in this attempt."}
               </p>
             </div>
-            <span className="plan-metric">
-              {unansweredCount ? `${unansweredCount} unanswered` : `${wrongReviews.length} wrong`}
-            </span>
+            <span className="plan-metric">{falseConfidenceCount} high-risk</span>
           </div>
 
           <div className="next-plan-item">
             <span>3</span>
             <div>
-              <strong>Refresh one framework</strong>
-              <p>Skim the relevant checklist before the next timed session.</p>
+              <strong>Refresh {frameworkCue}</strong>
+              <p>
+                Skim one checklist before the next timed session
+                {unansweredCount ? `, then revisit ${unansweredCount} unanswered item${unansweredCount === 1 ? "" : "s"}` : ""}.
+              </p>
             </div>
             <button className="secondary-button compact-button" type="button" onClick={onFrameworks}>
               Frameworks
@@ -2104,7 +2176,9 @@ function ResultsView({
       <section className="panel">
         <div className="section-heading">
           <h2>Mistakes To Fix</h2>
-          <span>{correctCount} questions answered correctly (not shown)</span>
+          <span>
+            {falseConfidenceCount} false-confidence · {correctCount} correct
+          </span>
         </div>
 
         {wrongReviews.length === 0 ? (
@@ -2116,6 +2190,26 @@ function ResultsView({
           <div className="review-list">
             {wrongReviews.map((review) => (
               <WrongReviewCard key={review.questionId} review={review} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Lucky Correct Review</h2>
+          <span>{luckyCorrectCount} correct with low confidence</span>
+        </div>
+
+        {luckyCorrectCount === 0 ? (
+          <p className="empty-state">
+            No low-confidence correct answers in this attempt. Your correct answers were marked
+            confident.
+          </p>
+        ) : (
+          <div className="review-list review-list--compact">
+            {confidenceSummary.luckyCorrect.slice(0, 5).map((review) => (
+              <CalibrationReviewCard key={review.questionId} review={review} />
             ))}
           </div>
         )}
@@ -2235,34 +2329,34 @@ function ShareReviewDialog({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const targetRef = useRef<HTMLInputElement>(null);
+  const copyButtonRef = useRef<HTMLButtonElement>(null);
   const previewRef = useRef<HTMLTextAreaElement>(null);
+  const defaultContext = useMemo(() => getDefaultShareContext(attempt), [attempt]);
   const [identityMode, setIdentityMode] =
-    useState<ShareCandidateContext["identityMode"]>("anonymous");
-  const [displayLabel, setDisplayLabel] = useState("");
-  const [targetRoleOrAssessment, setTargetRoleOrAssessment] = useState("");
-  const [feedbackRequest, setFeedbackRequest] = useState("");
-  const [testConditions, setTestConditions] = useState<
-    ShareCandidateContext["testConditions"] | ""
-  >("");
-  const [deadline, setDeadline] = useState("");
-  const [targetCompanyOrProductArea, setTargetCompanyOrProductArea] = useState("");
-  const [selfAssessment, setSelfAssessment] = useState("");
-  const [seniorQuestion, setSeniorQuestion] = useState("");
-  const [detailPreset, setDetailPreset] = useState<ShareDetailPreset>("senior_brief");
+    useState<ShareCandidateContext["identityMode"]>(defaultContext.identityMode);
+  const [displayLabel, setDisplayLabel] = useState(defaultContext.displayLabel ?? "");
+  const [targetRoleOrAssessment, setTargetRoleOrAssessment] = useState(
+    defaultContext.targetRoleOrAssessment
+  );
+  const [feedbackRequest, setFeedbackRequest] = useState(defaultContext.feedbackRequest);
+  const [testConditions, setTestConditions] = useState<ShareCandidateContext["testConditions"]>(
+    defaultContext.testConditions
+  );
+  const [deadline, setDeadline] = useState(defaultContext.deadline ?? "");
+  const [targetCompanyOrProductArea, setTargetCompanyOrProductArea] = useState(
+    defaultContext.targetCompanyOrProductArea ?? ""
+  );
+  const [selfAssessment, setSelfAssessment] = useState(defaultContext.selfAssessment ?? "");
+  const [seniorQuestion, setSeniorQuestion] = useState(defaultContext.seniorQuestion ?? "");
+  const [detailPreset, setDetailPreset] = useState<ShareDetailPreset>("safe_summary");
+  const [isContextOpen, setIsContextOpen] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
 
   useEffect(() => {
-    targetRef.current?.focus({ preventScroll: true });
+    copyButtonRef.current?.focus({ preventScroll: true });
   }, []);
 
-  const isContextComplete = Boolean(
-    targetRoleOrAssessment.trim() && feedbackRequest.trim() && testConditions
-  );
-
   const markdownPreview = useMemo(() => {
-    if (!isContextComplete || !testConditions) return "";
-
     const context: ShareCandidateContext = {
       identityMode,
       displayLabel,
@@ -2291,7 +2385,6 @@ function ShareReviewDialog({
     displayLabel,
     feedbackRequest,
     identityMode,
-    isContextComplete,
     questions,
     reviews,
     selfAssessment,
@@ -2327,129 +2420,29 @@ function ShareReviewDialog({
     >
       <div className="share-dialog-header">
         <div>
-          <h2 id="share-dialog-title">Share for senior review</h2>
-          <p>Create a coaching packet with your context, attempt summary, priority mistakes, and next practice plan.</p>
+          <h2 id="share-dialog-title">Share review packet</h2>
+          <p>Copy a clean result summary now, or add senior context for deeper coaching.</p>
         </div>
       </div>
 
-      <div className="share-form-grid">
-        <label className="control-block">
-          <span className="control-label">Target role or assessment</span>
-          <input
-            ref={targetRef}
-            value={targetRoleOrAssessment}
-            onChange={(event) => setTargetRoleOrAssessment(event.target.value)}
-            placeholder="Senior PM analytical screen, Meta-style PM interview"
-            required
-          />
-        </label>
-
-        <label className="control-block">
-          <span className="control-label">Test conditions</span>
-          <select
-            value={testConditions}
-            onChange={(event) =>
-              setTestConditions(event.target.value as ShareCandidateContext["testConditions"])
-            }
-            required
-          >
-            <option value="">Select conditions</option>
-            {TEST_CONDITION_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <label className="control-block">
-        <span className="control-label">Feedback request</span>
-        <textarea
-          value={feedbackRequest}
-          onChange={(event) => setFeedbackRequest(event.target.value)}
-          placeholder="Tell me whether my misses are mostly metrics, statistics, or product judgment."
-          rows={3}
-          required
-        />
-      </label>
-
-      <div className="share-form-grid">
-        <label className="control-block">
-          <span className="control-label">Share identity</span>
-          <select
-            aria-label="Share identity"
-            value={identityMode}
-            onChange={(event) =>
-              setIdentityMode(event.target.value as ShareCandidateContext["identityMode"])
-            }
-          >
-            <option value="anonymous">Anonymous candidate</option>
-            <option value="display_label">Use my name or label</option>
-          </select>
-        </label>
-
-        {identityMode === "display_label" && (
-          <label className="control-block">
-            <span className="control-label">Display label</span>
-            <input
-              value={displayLabel}
-              onChange={(event) => setDisplayLabel(event.target.value)}
-              placeholder="Edward, E.P., Candidate"
-            />
-          </label>
-        )}
-      </div>
-
-      <div className="share-form-grid">
-        <label className="control-block">
-          <span className="control-label">Interview date or deadline</span>
-          <input
-            value={deadline}
-            onChange={(event) => setDeadline(event.target.value)}
-            placeholder="2026-06-01"
-          />
-        </label>
-        <label className="control-block">
-          <span className="control-label">Target company / product area</span>
-          <input
-            value={targetCompanyOrProductArea}
-            onChange={(event) => setTargetCompanyOrProductArea(event.target.value)}
-            placeholder="Growth, marketplace, analytics-heavy PM"
-          />
-        </label>
-      </div>
-
-      <div className="share-form-grid">
-        <label className="control-block">
-          <span className="control-label">My self-assessment</span>
-          <textarea
-            value={selfAssessment}
-            onChange={(event) => setSelfAssessment(event.target.value)}
-            rows={3}
-          />
-        </label>
-        <label className="control-block">
-          <span className="control-label">Specific question for senior</span>
-          <textarea
-            value={seniorQuestion}
-            onChange={(event) => setSeniorQuestion(event.target.value)}
-            rows={3}
-          />
-        </label>
+      <div className="share-ready-panel">
+        <div className="share-ready-copy">
+          <strong>Ready to copy</strong>
+          <span>Includes score, weakest topic, confidence risk, pacing signal, and next drill.</span>
+        </div>
+        <button
+          className="primary-button"
+          type="button"
+          ref={copyButtonRef}
+          onClick={handleCopy}
+        >
+          Copy packet
+        </button>
       </div>
 
       <div className="share-detail-setting">
         <span className="control-label">Detail preset</span>
         <div className="segmented-control" aria-label="Detail preset">
-          <button
-            type="button"
-            className={detailPreset === "senior_brief" ? "active" : ""}
-            aria-pressed={detailPreset === "senior_brief"}
-            onClick={() => setDetailPreset("senior_brief")}
-          >
-            Senior Brief
-          </button>
           <button
             type="button"
             className={detailPreset === "safe_summary" ? "active" : ""}
@@ -2458,22 +2451,148 @@ function ShareReviewDialog({
           >
             Safe Summary
           </button>
+          <button
+            type="button"
+            className={detailPreset === "senior_brief" ? "active" : ""}
+            aria-pressed={detailPreset === "senior_brief"}
+            onClick={() => setDetailPreset("senior_brief")}
+          >
+            Senior Brief
+          </button>
         </div>
         <p>
-          Senior Brief can include missed question prompts, correct answers, and explanations.
-          Safe Summary omits full prompts and answer text.
+          Safe Summary omits full prompts and answer text. Senior Brief can include missed question
+          prompts, correct answers, and explanations. Share only with a trusted reviewer.
         </p>
       </div>
+
+      <div className="share-context-toggle">
+        <div>
+          <strong>Senior context</strong>
+          <span>Add a target role and feedback ask when you want more specific coaching.</span>
+        </div>
+        <button
+          className="secondary-button compact-button"
+          type="button"
+          aria-expanded={isContextOpen}
+          onClick={() => setIsContextOpen((isOpen) => !isOpen)}
+        >
+          {isContextOpen ? "Hide senior context" : "Add senior context"}
+        </button>
+      </div>
+
+      {isContextOpen && (
+        <div className="share-optional-context">
+          <div className="share-form-grid">
+            <label className="control-block">
+              <span className="control-label">Target role or assessment</span>
+              <input
+                value={targetRoleOrAssessment}
+                onChange={(event) => setTargetRoleOrAssessment(event.target.value)}
+                placeholder="Senior PM analytical screen, Meta-style PM interview"
+              />
+            </label>
+
+            <label className="control-block">
+              <span className="control-label">Test conditions</span>
+              <select
+                value={testConditions}
+                onChange={(event) =>
+                  setTestConditions(event.target.value as ShareCandidateContext["testConditions"])
+                }
+              >
+                {TEST_CONDITION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <label className="control-block">
+            <span className="control-label">Feedback request</span>
+            <textarea
+              value={feedbackRequest}
+              onChange={(event) => setFeedbackRequest(event.target.value)}
+              placeholder="Tell me whether my misses are mostly metrics, statistics, or product judgment."
+              rows={3}
+            />
+          </label>
+
+          <div className="share-form-grid">
+            <label className="control-block">
+              <span className="control-label">Share identity</span>
+              <select
+                aria-label="Share identity"
+                value={identityMode}
+                onChange={(event) =>
+                  setIdentityMode(event.target.value as ShareCandidateContext["identityMode"])
+                }
+              >
+                <option value="anonymous">Anonymous candidate</option>
+                <option value="display_label">Use my name or label</option>
+              </select>
+            </label>
+
+            {identityMode === "display_label" && (
+              <label className="control-block">
+                <span className="control-label">Display label</span>
+                <input
+                  value={displayLabel}
+                  onChange={(event) => setDisplayLabel(event.target.value)}
+                  placeholder="Edward, E.P., Candidate"
+                />
+              </label>
+            )}
+          </div>
+
+          <div className="share-form-grid">
+            <label className="control-block">
+              <span className="control-label">Interview date or deadline</span>
+              <input
+                value={deadline}
+                onChange={(event) => setDeadline(event.target.value)}
+                placeholder="2026-06-01"
+              />
+            </label>
+            <label className="control-block">
+              <span className="control-label">Target company / product area</span>
+              <input
+                value={targetCompanyOrProductArea}
+                onChange={(event) => setTargetCompanyOrProductArea(event.target.value)}
+                placeholder="Growth, marketplace, analytics-heavy PM"
+              />
+            </label>
+          </div>
+
+          <div className="share-form-grid">
+            <label className="control-block">
+              <span className="control-label">My self-assessment</span>
+              <textarea
+                value={selfAssessment}
+                onChange={(event) => setSelfAssessment(event.target.value)}
+                rows={3}
+              />
+            </label>
+            <label className="control-block">
+              <span className="control-label">Specific question for senior</span>
+              <textarea
+                value={seniorQuestion}
+                onChange={(event) => setSeniorQuestion(event.target.value)}
+                rows={3}
+              />
+            </label>
+          </div>
+        </div>
+      )}
 
       <label className="control-block">
         <span className="control-label">Markdown preview</span>
         <textarea
           ref={previewRef}
           className="share-preview"
-          value={
-            markdownPreview ||
-            "Complete target, feedback request, and test conditions to generate a preview."
-          }
+          value={markdownPreview}
           readOnly
           rows={12}
         />
@@ -2484,9 +2603,6 @@ function ShareReviewDialog({
       </p>
 
       <div className="share-dialog-actions">
-        <button className="primary-button" type="button" disabled={!markdownPreview} onClick={handleCopy}>
-          Copy review packet
-        </button>
         <button className="secondary-button" type="button" onClick={onClose}>
           Cancel
         </button>
@@ -2521,6 +2637,30 @@ function WrongReviewCard({ review }: { review: QuestionReview }) {
           </dd>
         </div>
       </dl>
+      <p>{review.explanation}</p>
+      <div className="tag-list">
+        {review.conceptTags.map((tag) => (
+          <span key={tag}>{tag}</span>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function CalibrationReviewCard({ review }: { review: QuestionReview }) {
+  const question = QUESTION_BY_ID.get(review.questionId);
+  if (!question) return null;
+
+  return (
+    <article className="review-card calibration">
+      <div className="review-card-header">
+        <span>{TOPIC_LABELS[review.topic]}</span>
+        <strong>{confidenceLabel(review.confidence)}</strong>
+      </div>
+      <h3>{review.prompt}</h3>
+      <p>
+        Correct answer: {review.correctChoiceId}. {getChoiceText(question, review.correctChoiceId)}
+      </p>
       <p>{review.explanation}</p>
       <div className="tag-list">
         {review.conceptTags.map((tag) => (

@@ -1,8 +1,8 @@
-# PM Assessment Gym
+# PM Bench
 
 Practice mocks for product management analytical assessments. Built as a single-page React + TypeScript app with a 121-question original bank covering six PM skill areas: Product Analytics, Data Literacy, Chart Interpretation, Inductive Reasoning, Data Interpretation, and A/B Testing.
 
-**Live demo:** https://pm-assessment-lime.vercel.app
+**Live demo:** https://pmbench.duypham.me
 
 Auto-deploys to Vercel on every push to `main`. Pull requests get their own preview URL.
 
@@ -16,8 +16,9 @@ Auto-deploys to Vercel on every push to `main`. Pull requests get their own prev
 - Weakest-topic detection and one-click drill
 - localStorage history of your last 5 attempts
 - Per-question timing summary on submitted attempts, including slow missed items, over-investment signals, and time-expired unanswered risk
-- Copyable "Share for review" Markdown packets with Senior Brief and Safe Summary detail presets
-- Local `/shared-review` packet import view for senior reviewers, with no backend or saved imported packets
+- Copyable "Share for review" packets that open with an immediately copyable Safe Summary
+- Optional senior context and trusted-review Senior Brief packets for deeper coaching
+- Local `/shared-review` packet import view for reviewers, with no backend or saved imported packets
 - Light and dark theme with manual toggle
 - Keyboard-first flow: `1`–`5` answers, `Shift+1`–`Shift+3` confidence, arrow navigation, next-unanswered jump, and a shortcuts help overlay
 - App modals close with Escape or a backdrop click while preserving focus restoration for keyboard users
@@ -39,7 +40,7 @@ Then open the URL Vite prints (default `http://localhost:5173`).
 
 ## Routes
 
-PM Assessment Gym is still a single-page app, but core surfaces now have shareable paths:
+PM Bench is still a single-page app, but core surfaces now have shareable paths:
 
 | Path | Behavior |
 | --- | --- |
@@ -66,7 +67,7 @@ PM Assessment Gym is still a single-page app, but core surfaces now have shareab
 
 Assessment routes are launch/configuration routes for new visitors: they select the mode, feedback mode, and topic, but they do not start a timed session until you press Start. On the same device, refreshing a matching in-progress assessment route restores the active local session, including the selected question set, answers, current question, confidence drafts, and remaining time. Result routes are local-only because attempts are stored in localStorage; opening a missing result ID shows a short unavailable message and returns you to the start surface.
 
-Shared review packets are portable local artifacts: Results can generate Markdown for a trusted reviewer, and `/shared-review` can render a pasted packet on another device. The app does not create public result links, upload packets, save imported packets, or sync share data to a backend.
+Shared review packets are portable local artifacts: Results opens with a Safe Summary Markdown packet that can be copied immediately without filling a form. Users can optionally add senior-review context, and can switch to Senior Brief when sharing missed prompts, answer details, and explanations with a trusted reviewer. `/shared-review` can render a pasted packet on another device. The app does not create public result links, upload packets, save imported packets, or sync share data to a backend.
 
 The Vercel deployment uses `vercel.json` to rewrite deep links back to the Vite app so direct URLs such as `/frameworks`, `/shared-review`, and `/topic-drill/ab-testing/practice` load without a static-host 404.
 
@@ -177,6 +178,7 @@ Checks topic coverage, question structure, and correct-answer letter balance. Wh
 ## Project structure
 
 - `src/questions.ts` — the question bank (121 questions, at least 20 per topic) plus topic config.
+- `src/branding.ts` — shared product identity constants for the PM Bench name, tagline, URL, and legacy packet compatibility.
 - `src/frameworks.ts` — quick-reference framework notes shown in the Frameworks view.
 - `src/routes.ts` — local route parsing, canonical paths, topic slugs, and document titles.
 - `src/scoring.ts` — selection, scoring, weakest-topic detection, and review building.
@@ -185,6 +187,7 @@ Checks topic coverage, question structure, and correct-answer letter balance. Wh
 - `src/storage.ts` — localStorage persistence of the last 5 attempts, shortcut preferences, and active assessment session snapshots.
 - `src/shortcuts.ts` — keyboard shortcut definitions, key matching, and editable/modal guards.
 - `src/App.tsx` — UI: home, test, results, frameworks views.
+- `public/favicon.svg` and `public/pmbench-logo.svg` — PM Bench Slash Stamp browser/app identity assets.
 - `vercel.json` — SPA rewrite so direct route paths serve the Vite bundle on Vercel.
 - `AGENTS.md` — Codex project memory and repository working instructions.
 
