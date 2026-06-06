@@ -8,5 +8,8 @@ export const LEGACY_APP_NAMES = ["PM Assessment Gym"] as const;
 export type SupportedAppName = typeof APP_NAME | (typeof LEGACY_APP_NAMES)[number];
 
 export function isSupportedAppName(value: unknown): value is SupportedAppName {
-  return typeof value === "string" && [APP_NAME, ...LEGACY_APP_NAMES].includes(value);
+  return (
+    value === APP_NAME ||
+    LEGACY_APP_NAMES.includes(value as (typeof LEGACY_APP_NAMES)[number])
+  );
 }
