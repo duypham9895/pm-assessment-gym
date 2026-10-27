@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix the observed quiz-use issues by locking revealed practice answers, making the question navigator status neutral, and recalibrating full mocks to better match the Alvin Alooba-style skill.
+**Goal:** Fix the observed quiz-use issues by locking revealed practice answers, making the question navigator status neutral, and recalibrating full mocks to better match an Alooba-style reference mock.
 
 **Architecture:** Keep the current single-page Vite React app. Add small pure selection helpers in `src/scoring.ts`, keep question configuration in `src/questions.ts`, add focused automated tests for answer locking and selection rules, and keep visual changes in `src/styles.css`. Avoid broad UI redesign or new product modes.
 
@@ -27,10 +27,10 @@
 - `src/App.tsx` lets keyboard shortcuts call the same overwrite path after Practice feedback is visible.
 - `src/App.tsx` lets confidence change after seeing Practice correctness, which makes review priority less trustworthy.
 - `src/styles.css` styles `.nav-pill--answered` with success colors, so answered wrong questions look visually correct.
-- `src/questions.ts` currently sets a 20-question full mock with A/B Testing at 4 and Chart/Data Interpretation at 3, while Alvin's `alooba-mock-test.skill` uses 21 questions with Chart Interpretation 4, Data Interpretation 4, and A/B Testing 3.
+- `src/questions.ts` currently sets a 20-question full mock with A/B Testing at 4 and Chart/Data Interpretation at 3, while the reference mock skill uses 21 questions with Chart Interpretation 4, Data Interpretation 4, and A/B Testing 3.
 - `src/scoring.ts` samples by topic only; it does not enforce a hard/medium/easy mix.
 - `src/scoring.ts` has no recent-repeat avoidance, so repeated attempts can feel stale.
-- Some distractors in `src/questions.ts` are too obviously wrong, which makes the bank feel easier than the Alvin skill even when the topic coverage is broad.
+- Some distractors in `src/questions.ts` are too obviously wrong, which makes the bank feel easier than the reference mock even when the topic coverage is broad.
 
 ## File Structure
 
@@ -41,11 +41,11 @@
 - Create: `src/scoring.test.ts` - regression tests for mock length, topic distribution, difficulty mix, and repeat avoidance.
 - Modify: `src/App.tsx` - prevent answer/confidence mutation after Practice reveal and pass lock state to UI.
 - Modify: `src/styles.css` - make answered navigator pills neutral and keep locked choices visually readable.
-- Modify: `src/questions.ts` - align full mock distribution with Alvin and add per-topic difficulty distribution.
+- Modify: `src/questions.ts` - align full mock distribution with the reference mock and add per-topic difficulty distribution.
 - Modify: `src/scoring.ts` - support difficulty-balanced full mock selection and recent-repeat avoidance.
 - Modify: `src/storage.ts` - no functional change expected; only read if tests expose attempt-shape issues.
-- Modify: `scripts/validate-question-bank.mjs` - validate 21-question Alvin distribution and warn on weak distractor phrases.
-- Modify: `README.md` - update visible product claims from 20-question mock to 21-question Alvin-style mock.
+- Modify: `scripts/validate-question-bank.mjs` - validate 21-question reference distribution and warn on weak distractor phrases.
+- Modify: `README.md` - update visible product claims from 20-question mock to 21-question Senior PM-style mock.
 - Create: `docs/review/2026-05-22-question-bank-calibration.md` - record the content calibration rubric and first-pass flagged distractors.
 
 ---
@@ -464,7 +464,7 @@ Expected: PASS.
 
 ---
 
-## Task 5: Align Full Mock With Alvin Skill
+## Task 5: Align Full Mock With the Reference Mock
 
 **Files:**
 - Modify: `src/questions.ts`
@@ -544,7 +544,7 @@ const {
 Change README feature bullets and mode copy:
 
 ```md
-- 21-question Alvin-style mock with a 30-minute timer and auto-submit
+- 21-question Senior PM-style mock with a 30-minute timer and auto-submit
 ```
 
 ```md
@@ -592,7 +592,7 @@ function countBy<T extends string>(items: T[]) {
 }
 
 describe("selectFullMockQuestions", () => {
-  it("selects the Alvin-style 21 question topic distribution", () => {
+  it("selects the Senior PM-style 21 question topic distribution", () => {
     const selected = selectFullMockQuestions(QUESTIONS);
     const topicCounts = countBy(selected.map((question) => question.topic));
 
@@ -863,9 +863,9 @@ Date: 2026-05-22
 
 ## Goal
 
-Make PM Assessment Gym feel closer to Alvin's Alooba-style Senior PM mock: concrete scenarios, specific numbers, 45-90 second reasoning, one correct answer, and plausible-but-wrong distractors.
+Make PM Assessment Gym feel closer to an Alooba-style Senior PM mock: concrete scenarios, specific numbers, 45-90 second reasoning, one correct answer, and plausible-but-wrong distractors.
 
-## Alvin Skill Calibration
+## Reference Mock Calibration
 
 - Full mock length: 21 questions.
 - Product Analytics: 4.
@@ -903,7 +903,7 @@ Audit 20 questions per pass. For each question, mark:
 - `keep`: all distractors are plausible.
 - `rewrite-distractors`: correct concept is good but wrong answers are too easy.
 - `rewrite-question`: prompt is too vague, too easy, or has ambiguous answers.
-- `replace`: question does not match the Alvin PM assessment shape.
+- `replace`: question does not match the reference PM assessment shape.
 ```
 
 - [x] **Step 5: Run question validation**
@@ -974,7 +974,7 @@ In Practice mode:
 
 Expected: answered question has one neutral answered color, not green/red correctness coloring.
 
-- [x] **Step 5: Manual check Alvin-style mock**
+- [x] **Step 5: Manual check Senior PM-style mock**
 
 Start a Full Mock and confirm:
 
@@ -983,7 +983,7 @@ Start a Full Mock and confirm:
 3. Topic distribution follows 4/3/4/3/4/3.
 4. Questions include a harder mix, not mostly easy recall.
 
-Expected: the mock feels closer to Alvin's chat skill and less like a simple quiz.
+Expected: the mock feels closer to the reference mock and less like a simple quiz.
 
 ---
 
@@ -1003,7 +1003,7 @@ git add src/App.tsx src/App.test.tsx src/styles.css
 git commit -m "fix: lock practice answers after feedback"
 ```
 
-- [x] **Commit 3: Alvin mock calibration**
+- [x] **Commit 3: reference mock calibration**
 
 ```bash
 git add src/questions.ts src/scoring.ts src/scoring.test.ts scripts/validate-question-bank.mjs README.md
@@ -1027,7 +1027,7 @@ git commit -m "docs: record question bank calibration rubric"
 - Exam mode answers remain editable before submit.
 - Navigator uses neutral answered styling only.
 - Full Mock uses 21 questions.
-- Full Mock matches Alvin topic distribution: 4/3/4/3/4/3.
+- Full Mock matches reference topic distribution: 4/3/4/3/4/3.
 - Full Mock selection uses the configured difficulty distribution.
 - Full Mock avoids recent questions when enough fresh questions exist.
 - Question validation passes.

@@ -4,9 +4,9 @@ Date: 2026-05-22
 
 ## Goal
 
-Make PM Assessment Gym feel closer to Alvin's Alooba-style Senior PM mock: concrete scenarios, specific numbers, 45-90 second reasoning, one correct answer, and plausible-but-wrong distractors.
+Make PM Assessment Gym feel closer to an Alooba-style Senior PM mock: concrete scenarios, specific numbers, 45-90 second reasoning, one correct answer, and plausible-but-wrong distractors.
 
-## Alvin Skill Calibration
+## Reference Mock Calibration
 
 - Full mock length: 21 questions.
 - Product Analytics: 4.
@@ -44,4 +44,4 @@ Audit 20 questions per pass. For each question, mark:
 - `keep`: all distractors are plausible.
 - `rewrite-distractors`: correct concept is good but wrong answers are too easy.
 - `rewrite-question`: prompt is too vague, too easy, or has ambiguous answers.
-- `replace`: question does not match the Alvin PM assessment shape.
+- `replace`: question does not match the reference PM assessment shape.

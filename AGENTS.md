@@ -19,10 +19,10 @@ The app is deployed from `main` to Vercel. The live demo listed in `README.md` i
 ## Current Source Of Truth
 
 - `README.md` and `src/` reflect the current app behavior.
-- `docs/superpowers/plans/2026-05-22-practice-lock-navigation-content-calibration.md` records the completed calibration pass: practice locking, neutral navigator styling, 21-question Alvin-style mock, difficulty-balanced selection, repeat avoidance, validator updates, and content calibration notes.
+- `docs/superpowers/plans/2026-05-22-practice-lock-navigation-content-calibration.md` records the completed calibration pass: practice locking, neutral navigator styling, 21-question Senior PM-style mock, difficulty-balanced selection, repeat avoidance, validator updates, and content calibration notes.
 - `docs/superpowers/plans/2026-05-23-keyboard-first-assessment-flow.md` records the completed keyboard-first pass: shortcut registry, shortcut preferences, first-time tip, help overlay, badges, focus behavior, and tests.
 - `docs/review/2026-05-22-question-bank-calibration.md` defines the content calibration rubric and remaining distractor-audit direction.
-- Older MVP docs under `docs/mvp/` are useful historical context, but some details are superseded. In particular, any 20-question full mock recommendation is superseded by the current 21-question Alvin-style mock in code and README.
+- Older MVP docs under `docs/mvp/` are useful historical context, but some details are superseded. In particular, any 20-question full mock recommendation is superseded by the current 21-question Senior PM-style mock in code and README.
 
 ## Product Behavior To Preserve
 

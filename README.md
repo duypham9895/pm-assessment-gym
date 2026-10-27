@@ -9,7 +9,7 @@ Auto-deploys to Vercel on every push to `main`. Pull requests get their own prev
 ## Features
 
 - **Full Mock** and **Topic Drill** modes with **Exam** or **Practice** feedback
-- 21-question Alvin-style mock with a 30-minute timer, auto-submit, and clear 4/3/4/3/4/3 topic weighting
+- 21-question Senior PM-style mock with a 30-minute timer, auto-submit, and clear 4/3/4/3/4/3 topic weighting
 - 121 original practice questions, with at least 20 per topic and answer positions kept within one of even balance
 - Question navigator (jump to any question) and "Next unanswered" jump
 - Practice mode shows the correct answer + explanation immediately

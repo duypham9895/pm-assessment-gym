@@ -18,7 +18,7 @@ function countBy<T extends string>(items: T[]) {
 }
 
 describe("selectFullMockQuestions", () => {
-  it("selects the Alvin-style 21 question topic distribution", () => {
+  it("selects the Senior PM-style 21 question topic distribution", () => {
     const selected = selectFullMockQuestions(QUESTIONS);
     const topicCounts = countBy(selected.map((question) => question.topic));
 
