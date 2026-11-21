@@ -6,6 +6,8 @@ This log tracks all executions of the question enrichment pipeline. Every run of
 
 | Date | Run ID | Action | Websites Touched | Candidates Crawled | Candidates Staged | Approved | Rejected | Imported | Total Questions | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-21 | 20261121T045120Z | Verify | 0 | 0 | 0 | 0 | 0 | 0 | 121 | Verified 0 candidate(s). Skipped: 0. |
+| 2026-11-21 | 20261121T045114Z | Crawl | 10 | 0 | 0 | 0 | 0 | 0 | 121 | Discovery completed. Source notes: 10. Candidates staged in crawled/: 0. |
 | 2026-05-25 | 20260525T023529Z | Verify | 0 | 0 | 0 | 0 | 0 | 0 | 121 | Verified 0 candidate(s). Skipped: 0. |
 | 2026-05-25 | 20260525T023523Z | Crawl | 10 | 0 | 0 | 0 | 0 | 0 | 121 | Discovery completed. Source notes: 10. Candidates staged in crawled/: 0. |
 | 2026-05-24 | 20260524T113329Z | Verify | 0 | 0 | 0 | 0 | 0 | 0 | 121 | Verified 0 candidate(s). Skipped: 0. |
